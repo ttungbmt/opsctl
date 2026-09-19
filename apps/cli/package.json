@@ -1,0 +1,35 @@
+{
+  "name": "@ops/cli",
+  "version": "0.1.0",
+  "repository": "github:ttungbmt/opsctl",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "ops": "./bin/run.js"
+  },
+  "files": [
+    "bin",
+    "dist"
+  ],
+  "oclif": {
+    "bin": "ops",
+    "dirname": "ops",
+    "commands": "./dist/commands",
+    "topicSeparator": " ",
+    "additionalVersionFlags": [
+      "-v"
+    ]
+  },
+  "scripts": {},
+  "dependencies": {
+    "@oclif/core": "^5.0.0",
+    "ink": "^7.1.1",
+    "react": "^19.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.1",
+    "@types/react": "^19.3.0",
+    "oclif": "^6.0.0",
+    "typescript": "^7.0.2"
+  }
+}

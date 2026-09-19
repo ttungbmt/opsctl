@@ -1,0 +1,35 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: jdx/mise-action@v2
+
+      - run: pnpm install --frozen-lockfile
+
+      # oclif pack can't install deps for a package nested in a pnpm workspace,
+      # so pack from a standalone copy (with its own pinned lockfile) outside the repo.
+      - name: Deploy CLI outside the workspace
+        run: pnpm --filter @ops/cli deploy "$RUNNER_TEMP/ops"
+
+      - name: Pack tarballs
+        working-directory: ${{ runner.temp }}/ops
+        run: >-
+          ./node_modules/.bin/oclif pack tarballs --no-xz
+          --targets linux-x64,linux-arm64,darwin-x64,darwin-arm64,win32-x64
+          --sha "$(git -C "$GITHUB_WORKSPACE" rev-parse --short HEAD)"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" "$RUNNER_TEMP"/ops/dist/*.tar.gz --generate-notes
