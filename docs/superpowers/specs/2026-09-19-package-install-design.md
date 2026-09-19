@@ -1,17 +1,23 @@
 # `ops package install` — Design
 
-Date: 2026-09-19 · Status: approved in brainstorming, pending spec review
+Date: 2026-09-19 · Status: revised (mise bootstrap as provider), pending spec review
 
 ## Goal
 
-First real Ops CLI command: `ops package install zsh` installs system packages through the platform package manager, idempotently, usable by both humans and agents. It also establishes the first layers (command → core → provider → executor), the TypeScript build, and the `PackageManager` contract later providers follow.
+First real Ops CLI command: `ops package install zsh` installs system packages idempotently, for humans and agents alike. It also establishes the first layers (command → core → provider → executor) and the TypeScript build.
 
 ## Decisions
 
-- Providers: **apt** and **yum/dnf** (Linux only).
-- Privilege: when not root, prepend `sudo` automatically; under `--non-interactive` use `sudo -n` so it never blocks on a password prompt.
-- Behaviors: skip already-installed packages, `--dry-run`, `--json`, `--yes`, `--non-interactive`.
-- Structure: layer folders inside `apps/cli/src`. Extract to `packages/*` only when a second consumer (TUI, plugin) appears.
+- **Provider: `mise bootstrap packages`, declarative.** `ops package install zsh` runs `mise bootstrap packages use -g apt:zsh`, which records `"apt:zsh" = "latest"` under `[bootstrap.packages]` in `~/.config/mise/config.toml` and installs it. A new machine reproduces the set with `mise bootstrap`. ops is itself installed through mise, so mise is always present.
+- **Managers:** the OS picks `apt` (Debian/Ubuntu) or `dnf` (RHEL/Fedora/CentOS). yum is not supported: dnf replaced it from RHEL 8, and mise has no built-in yum manager.
+- **Explicit manager passthrough:** input already in `manager:package` form (e.g. `brew:jq`) is used unchanged.
+- **Behaviors:** skip installed packages, `--dry-run`, `--json`, `--yes`, `--non-interactive`.
+- **Structure:** layer folders inside `apps/cli/src`; extract to `packages/*` when a second consumer appears.
+
+### Alternatives considered
+
+- **Hand-written apt/yum providers** (first draft of this spec, commit c855b4b): `dpkg-query`/`rpm -q` status, `apt-get`/`yum` install, own sudo handling. Rejected — it duplicates what mise bootstrap already does (installed-check, sudo, dry-run, confirmation, more managers, prune/upgrade) and would not give a declarative record.
+- **mise `apply` without saving** (imperative): rejected as the default because `status --json` only reports declared packages, and the declarative record is the foundation for a later `ops bootstrap` / `ops apply`.
 
 ## Command
 
@@ -20,48 +26,48 @@ ops package install <package...> [--json] [--yes|-y] [--non-interactive] [--dry-
 ```
 
 - `--json` uses oclif's `enableJsonFlag`: `run()` returns the result object and oclif prints it.
-- `--non-interactive` implies no confirmation prompt (same as `--yes`) plus `sudo -n` and `DEBIAN_FRONTEND=noninteractive`.
-- Package names starting with `-` are rejected (`INVALID_PACKAGE_NAME`) so they can never be read as package-manager options.
+- `--non-interactive` implies `--yes`, runs mise with stdin ignored, and never prompts.
 
 ## Layout (`apps/cli/src`)
 
 | File | Responsibility |
 |---|---|
 | `commands/package/install.ts` | oclif command: parse args/flags, build deps, call core, render human output, return result for `--json` |
-| `core/package/install.ts` | `installPackages(options, deps)`: check → plan → confirm → execute → verify → `InstallResult` |
+| `core/package/install.ts` | `installPackages(options, deps)`: normalize → declare → status → apply → status → `InstallResult` |
+| `core/package/spec.ts` | `toPackageSpec(name, manager)` |
 | `core/errors.ts` | `OpsError` with a `code` |
 | `core/output.ts` | Human rendering of `InstallResult` |
-| `providers/package-manager.ts` | `PackageManager` interface, `parseOsRelease()`, `detectPackageManager()` |
-| `providers/apt.ts` | apt implementation |
-| `providers/yum.ts` | yum/dnf implementation |
+| `providers/os.ts` | `parseOsRelease(text)`, `detectSystemManager()` |
+| `providers/mise-bootstrap.ts` | The only file that knows mise's bootstrap CLI and JSON shape |
 | `executor/exec.ts` | `Runner` interface and its execa implementation |
 
-Dependency direction: `commands → core → providers → executor`. Core and providers receive a `Runner`; nothing below `commands` imports oclif.
+Dependency direction: `commands → core → providers → executor`. Nothing below `commands` imports oclif.
 
 ## Interfaces
 
 ```ts
-// executor/exec.ts
+// executor/exec.ts — execa with argument arrays, never a shell string
 interface RunOptions {
-  privileged?: boolean            // needs root: prepend sudo (sudo -n when nonInteractive) unless uid 0
-  env?: Record<string, string>
+  stdio?: 'capture' | 'inherit'   // inherit: stream output and let mise/sudo prompt
+  stdin?: 'inherit' | 'ignore'    // ignore under --non-interactive
 }
 interface Runner {
-  /** Final argv after privilege handling — used for execution and for --dry-run display. */
-  resolve(cmd: string, args: string[], opts?: RunOptions): string[]
-  /** Never throws on non-zero exit; callers inspect exitCode. Streams output to the terminal when inherit is set. */
-  run(cmd: string, args: string[], opts?: RunOptions & { inherit?: boolean }):
-    Promise<{ stdout: string; stderr: string; exitCode: number }>
-  commandExists(cmd: string): Promise<boolean>
+  /** Never throws on non-zero exit; callers inspect exitCode. Throws only if the binary is missing (ENOENT). */
+  run(cmd: string, args: string[], opts?: RunOptions): Promise<{ stdout: string; stderr: string; exitCode: number }>
 }
-// created with createRunner({ nonInteractive }) — uses execa with argument arrays, never a shell string
 
-// providers/package-manager.ts
-interface PackageManager {
-  name: 'apt' | 'yum' | 'dnf'
-  status(pkg: string): Promise<{ installed: boolean; version?: string }>
-  installCommand(pkgs: string[]): { cmd: string; args: string[]; opts: RunOptions }
-  install(pkgs: string[]): Promise<{ exitCode: number; stderr: string }>  // one call for all missing packages
+// core/package/spec.ts
+type PackageSpec = `${string}:${string}`            // e.g. "apt:zsh"
+function toPackageSpec(name: string, manager: string): PackageSpec
+// "zsh" + "apt" → "apt:zsh"; "brew:jq" → "brew:jq"; leading "-" or empty part → INVALID_PACKAGE_NAME
+
+// providers/mise-bootstrap.ts
+interface PackageState { spec: PackageSpec; installed: boolean; version?: string }
+interface MiseBootstrap {
+  declare(specs: PackageSpec[]): Promise<void>                     // use -g --no-install
+  status(): Promise<PackageState[]>                                // status --json, Zod-validated
+  apply(specs: PackageSpec[], opts: { yes: boolean; nonInteractive: boolean; capture: boolean }): Promise<{ exitCode: number; stderr: string }>
+  dryRun(specs: PackageSpec[]): Promise<string[]>                  // use -g --dry-run → planned command lines
 }
 
 // core/package/install.ts
@@ -69,57 +75,71 @@ type PackageStatus = 'already-installed' | 'installed' | 'would-install' | 'fail
 interface InstallResult {
   success: boolean
   action: 'install'
-  manager: string
+  manager: string                 // detected system manager ("apt" | "dnf")
   dryRun: boolean
-  command?: string[]              // resolved install argv (set when something needed installing)
-  packages: { name: string; status: PackageStatus; version?: string }[]
+  commands?: string[]             // dry-run only: commands mise would run
+  packages: { spec: PackageSpec; status: PackageStatus; version?: string }[]
 }
 ```
 
-## Providers
+## mise commands used
 
-**apt** — status: `dpkg-query -W -f '${Status} ${Version}' <pkg>`; installed iff exit 0 and status starts with `install ok installed`. Install: `apt-get install -y <pkgs...>`, privileged, env `DEBIAN_FRONTEND=noninteractive` when non-interactive. No automatic `apt-get update` (out of scope).
+| Purpose | Command |
+|---|---|
+| Record in global config (idempotent) | `mise bootstrap packages use -g --no-install <specs...>` |
+| Current state | `mise bootstrap packages status --json` |
+| Install missing | `mise bootstrap packages apply [--yes] <specs...>` |
+| Preview | `mise bootstrap packages use -g --dry-run <specs...>` |
 
-**yum/dnf** — status: `rpm -q --qf '%{VERSION}-%{RELEASE}' <pkg>`; installed iff exit 0. Install: `dnf install -y <pkgs...>` when `dnf` exists, else `yum install -y <pkgs...>`, privileged. `name` reports which binary is used.
+`status --json` shape (observed on mise 2026.9.11), keyed by manager:
+
+```json
+{ "apt": { "available": true, "packages": [
+  { "package": "zsh", "requested_version": "latest", "desired_state": "present",
+    "state": "installed", "installed_version": "5.9-6ubuntu2" } ] } }
+```
+
+A spec `apt:zsh` is installed iff `apt.packages[]` has `package == "zsh"` with `state == "installed"`; its version is `installed_version`. Unknown extra fields are ignored; a shape mismatch raises `MISE_BOOTSTRAP_UNAVAILABLE` with the Zod message.
 
 ## Detection
 
-`parseOsRelease(text)` reads `ID` and `ID_LIKE` from `/etc/os-release`. Tokens `debian`/`ubuntu` → apt (requires `apt-get`); `rhel`/`fedora`/`centos` → dnf if present, else yum. Anything else, a missing os-release file, or a missing binary → `UNSUPPORTED_PLATFORM`.
+`parseOsRelease` reads `ID` and `ID_LIKE` from `/etc/os-release`. Tokens `debian`/`ubuntu` → `apt`; `rhel`/`fedora`/`centos` → `dnf`. Anything else or a missing file → `UNSUPPORTED_PLATFORM`. Detection is skipped for inputs that all carry an explicit manager.
 
 ## Flow
 
-1. Validate names; detect the package manager.
-2. `status()` for every package (read-only, also under `--dry-run`).
-3. Nothing missing → all `already-installed`, `success: true`.
-4. Resolve the install argv via `runner.resolve(...installCommand(missing))` and set `command`.
-5. `--dry-run` → missing packages become `would-install`, `success: true`, nothing executed.
-6. Neither `--yes` nor `--non-interactive`: if stdin is a TTY, print the plan and confirm (`node:readline/promises`, default no; declining exits non-zero with `CONFIRMATION_DECLINED`); if not a TTY → `CONFIRMATION_REQUIRED`.
-7. `install(missing)` with output streamed to the terminal (captured instead when `--json`).
-8. If it failed and stderr shows `sudo` needs a password (non-interactive) → `SUDO_PASSWORD_REQUIRED`.
-9. Re-check `status()` of the missing packages: now installed → `installed` + version; still missing → `failed`. `success` is true iff none failed.
+1. Detect the manager; convert every name with `toPackageSpec`.
+2. **`--dry-run`:** call `dryRun(specs)` and `status()` (read-only; nothing written or installed). Declared-and-installed specs → `already-installed`, the rest → `would-install`; `commands` holds mise's planned lines. `success: true`.
+3. Neither `--yes` nor `--non-interactive`, and stdin is not a TTY → `CONFIRMATION_REQUIRED` (before anything is written).
+4. `declare(specs)` — records all specs in the global config.
+5. `status()` → specs already installed are `already-installed`.
+6. Nothing missing → return, `success: true`, no `apply`.
+7. `apply(missing, …)` — without `--yes`, mise shows its own confirmation prompt (stdio inherited). With `--json`, output is captured instead of streamed.
+8. If `apply` failed and stderr contains `password is required` → `SUDO_PASSWORD_REQUIRED`.
+9. `status()` again: installed → `installed` + version; otherwise `failed`. `success` is true iff none failed.
+
+A spec stays declared in config even if its install fails — the config records desired state; re-running retries it.
 
 ## Errors and output
 
-`OpsError` codes: `UNSUPPORTED_PLATFORM`, `INVALID_PACKAGE_NAME`, `CONFIRMATION_REQUIRED`, `CONFIRMATION_DECLINED`, `SUDO_PASSWORD_REQUIRED`.
+`OpsError` codes: `UNSUPPORTED_PLATFORM`, `INVALID_PACKAGE_NAME`, `CONFIRMATION_REQUIRED`, `SUDO_PASSWORD_REQUIRED`, `MISE_BOOTSTRAP_UNAVAILABLE` (`mise` not on PATH, `mise bootstrap packages` not recognized by an older mise, or unexpected JSON).
 
 - Any `OpsError` → exit code 1; with `--json` the output is `{ "success": false, "error": { "code", "message" } }`.
-- A result with `success: false` (some package `failed`) → printed normally, exit code 1.
+- A result with `success: false` → printed normally, exit code 1.
+- Declining mise's own prompt makes `apply` exit non-zero → the packages report `failed`.
 
 Human output:
 
 ```
 Package manager: apt
-✓ zsh      already installed (5.9-6ubuntu2)
-+ ripgrep  installed (14.1.0)
-~ sl       would install
-✗ foo      failed
+✓ apt:zsh      already installed (5.9-6ubuntu2)
++ apt:ripgrep  installed (14.1.0)
+~ apt:sl       would install
+✗ apt:foo      failed
 ```
-
-Dry run adds a line: `Would run: sudo apt-get install -y sl`.
 
 ## Build and tooling
 
-- Dependencies: `execa` (runtime), `vitest` (dev).
+- Dependencies: `execa`, `zod` (runtime); `vitest` (dev).
 - `apps/cli` scripts: `build` (`tsc`), `dev` (`tsc --watch`), `test` (`vitest run`). Root forwards `build`/`test` via `pnpm --filter @ops/cli`.
 - oclif `commands: ./dist/commands`; `bin/run.js` unchanged. The dev symlink (`pnpm link:global`) needs a prior `pnpm build`.
 - `release.yml`: run `pnpm --filter @ops/cli build` before `pnpm deploy` (`files` already includes `dist`).
@@ -127,22 +147,28 @@ Dry run adds a line: `Would run: sudo apt-get install -y sl`.
 
 ## Testing
 
-Vitest, with a `FakeRunner` that records calls and returns scripted `{stdout, stderr, exitCode}` per command.
+Vitest, with a `FakeRunner` that records calls and returns scripted `{stdout, stderr, exitCode}` per argv; `status --json` fixtures use the real shape above.
 
-- `parseOsRelease` / detection: fixtures for ubuntu, debian, fedora, rocky, alpine (unsupported), missing binary.
-- apt and yum/dnf: exact status/install argv and parsing of installed / not-installed output.
-- Runner `resolve`: sudo prepended when not root, `sudo -n` when non-interactive, nothing when root.
-- `installPackages`: all installed (no install call), dry-run (no install call, `would-install`, `command` set), `CONFIRMATION_REQUIRED` without TTY, install success, install partial failure → `success:false`, invalid package name.
+- `toPackageSpec`: plain name, explicit manager, leading `-`, empty parts.
+- `parseOsRelease` / `detectSystemManager`: ubuntu, debian, fedora, rocky, alpine (unsupported), missing file.
+- `MiseBootstrap`: exact argv per method; status parsing (installed, missing, unknown manager key, malformed JSON).
+- `installPackages`: all installed → no `apply`; some missing → `apply` with only those; dry-run → no `declare`/`apply`; non-TTY without `--yes` → `CONFIRMATION_REQUIRED` and no `declare`; failed install → `success: false`; sudo password stderr → `SUDO_PASSWORD_REQUIRED`.
 
-Manual verification on this machine (Ubuntu on WSL, zsh already installed):
+Manual verification (Ubuntu on WSL; `apt:zsh` already declared and installed in the global config):
 
-- `ops package install zsh` → `✓ zsh already installed`
-- `ops package install sl --dry-run` → `Would run: sudo apt-get install -y sl`
-- `ops package install zsh --json` → valid JSON
+- `ops package install zsh` → `✓ apt:zsh already installed`, config unchanged.
+- `ops package install sl --dry-run` → planned command, config unchanged.
+- `ops package install zsh --json` → valid JSON.
 - Real install needs the user's sudo password: user runs `! ops package install sl`.
 
-yum/dnf is covered by unit tests only (no container runtime in this WSL).
+dnf is covered by unit tests only (no container runtime in this WSL).
+
+## Trade-offs
+
+- ops depends on mise's bootstrap CLI flags and JSON, a young feature that may change. All of it lives in `providers/mise-bootstrap.ts`, validated with Zod and surfaced as `MISE_BOOTSTRAP_UNAVAILABLE`.
+- Every install is persisted to the user's global mise config — intentional (desired state), but it means `ops package install` is not a throwaway action.
+- Package names that differ between distros remain the user's responsibility.
 
 ## Out of scope
 
-brew/winget providers, `package remove|update|upgrade|search|list`, automatic `apt-get update`, a shared base command for global flags, Ink output.
+`package remove` (later: `mise bootstrap packages prune`), `update|upgrade|search|list`, writing to a project-local config, a default manager on macOS/Windows, a shared base command for global flags, Ink output.
