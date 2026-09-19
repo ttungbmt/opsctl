@@ -48,17 +48,19 @@ Dependency direction: `commands → core → providers → executor`. Nothing be
 ```ts
 // executor/exec.ts — execa with argument arrays, never a shell string
 interface RunOptions {
-  stdio?: 'capture' | 'inherit'   // inherit: stream output and let mise/sudo prompt
+  stdout?: 'capture' | 'inherit'  // capture (default) collects output; inherit streams stdout/stderr and lets mise/sudo prompt
   stdin?: 'inherit' | 'ignore'    // ignore under --non-interactive
 }
+interface RunResult { stdout: string; stderr: string; exitCode: number }
 interface Runner {
-  /** Never throws on non-zero exit; callers inspect exitCode. Throws only if the binary is missing (ENOENT). */
-  run(cmd: string, args: string[], opts?: RunOptions): Promise<{ stdout: string; stderr: string; exitCode: number }>
+  /** Never throws on non-zero exit; throws CommandNotFoundError only if the binary is missing. */
+  run(cmd: string, args: string[], opts?: RunOptions): Promise<RunResult>
 }
+function sudoReady(runner: Runner, uid?: number): Promise<boolean>  // root, or `sudo -n true` succeeds
 
 // core/package/spec.ts
 type PackageSpec = `${string}:${string}`            // e.g. "apt:zsh"
-function toPackageSpec(name: string, manager: string): PackageSpec
+function toPackageSpec(name: string, manager?: string): PackageSpec
 // "zsh" + "apt" → "apt:zsh"; "brew:jq" → "brew:jq"; leading "-" or empty part → INVALID_PACKAGE_NAME
 
 // providers/mise-bootstrap.ts
@@ -66,7 +68,7 @@ interface PackageState { spec: PackageSpec; installed: boolean; version?: string
 interface MiseBootstrap {
   declare(specs: PackageSpec[]): Promise<void>                     // use -g --no-install
   status(): Promise<PackageState[]>                                // status --json, Zod-validated
-  apply(specs: PackageSpec[], opts: { yes: boolean; nonInteractive: boolean; capture: boolean }): Promise<{ exitCode: number; stderr: string }>
+  apply(specs: PackageSpec[], opts: { yes: boolean; nonInteractive: boolean; capture: boolean }): Promise<{ exitCode: number }>
   dryRun(specs: PackageSpec[]): Promise<string[]>                  // use -g --dry-run → planned command lines
 }
 
@@ -75,7 +77,7 @@ type PackageStatus = 'already-installed' | 'installed' | 'would-install' | 'fail
 interface InstallResult {
   success: boolean
   action: 'install'
-  manager: string                 // detected system manager ("apt" | "dnf")
+  managers: string[]              // distinct manager prefixes, e.g. ["apt"]
   dryRun: boolean
   commands?: string[]             // dry-run only: commands mise would run
   packages: { spec: PackageSpec; status: PackageStatus; version?: string }[]
@@ -109,19 +111,19 @@ A spec `apt:zsh` is installed iff `apt.packages[]` has `package == "zsh"` with `
 
 1. Detect the manager; convert every name with `toPackageSpec`.
 2. **`--dry-run`:** call `dryRun(specs)` and `status()` (read-only; nothing written or installed). Declared-and-installed specs → `already-installed`, the rest → `would-install`; `commands` holds mise's planned lines. `success: true`.
-3. Neither `--yes` nor `--non-interactive`, and stdin is not a TTY → `CONFIRMATION_REQUIRED` (before anything is written).
+3. Neither `--yes` nor `--non-interactive`, and (stdin is not a TTY **or** `--json` is set — mise's prompt would be invisible while output is captured) → `CONFIRMATION_REQUIRED` (before anything is written).
 4. `declare(specs)` — records all specs in the global config.
 5. `status()` → specs already installed are `already-installed`.
 6. Nothing missing → return, `success: true`, no `apply`.
-7. `apply(missing, …)` — without `--yes`, mise shows its own confirmation prompt (stdio inherited). With `--json`, output is captured instead of streamed.
-8. If `apply` failed and stderr contains `password is required` → `SUDO_PASSWORD_REQUIRED`.
+7. Under `--non-interactive`, if any missing spec uses `apt`/`dnf` and the user is not root, run `sudo -n true` first; non-zero → `SUDO_PASSWORD_REQUIRED` (sudo reads passwords from the TTY, so ignoring stdin alone would not prevent a prompt).
+8. `apply(missing, …)` — without `--yes`, mise shows its own confirmation prompt (stdio inherited). With `--json`, output is captured instead of streamed.
 9. `status()` again: installed → `installed` + version; otherwise `failed`. `success` is true iff none failed.
 
 A spec stays declared in config even if its install fails — the config records desired state; re-running retries it.
 
 ## Errors and output
 
-`OpsError` codes: `UNSUPPORTED_PLATFORM`, `INVALID_PACKAGE_NAME`, `CONFIRMATION_REQUIRED`, `SUDO_PASSWORD_REQUIRED`, `MISE_BOOTSTRAP_UNAVAILABLE` (`mise` not on PATH, `mise bootstrap packages` not recognized by an older mise, or unexpected JSON).
+`OpsError` codes: `UNSUPPORTED_PLATFORM`, `INVALID_PACKAGE_NAME`, `CONFIRMATION_REQUIRED`, `SUDO_PASSWORD_REQUIRED`, `MISE_BOOTSTRAP_UNAVAILABLE` (`mise` not on PATH, `mise bootstrap packages` not recognized by an older mise, or unexpected JSON), `MISE_COMMAND_FAILED` (any other non-zero mise exit; the message includes mise's stderr).
 
 - Any `OpsError` → exit code 1; with `--json` the output is `{ "success": false, "error": { "code", "message" } }`.
 - A result with `success: false` → printed normally, exit code 1.

@@ -3,6 +3,8 @@
   "private": true,
   "packageManager": "pnpm@12.4.2",
   "scripts": {
+    "build": "pnpm --filter @ops/cli build",
+    "test": "pnpm --filter @ops/cli test",
     "ops": "node apps/cli/bin/run.js",
     "link:global": "ln -sf \"$PWD/apps/cli/bin/run.js\" \"$HOME/.local/bin/ops\""
   }

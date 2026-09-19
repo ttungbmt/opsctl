@@ -20,16 +20,23 @@
       "-v"
     ]
   },
-  "scripts": {},
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest run"
+  },
   "dependencies": {
     "@oclif/core": "^5.0.0",
+    "execa": "^10.0.1",
     "ink": "^7.1.1",
-    "react": "^19.3.0"
+    "react": "^19.3.0",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/node": "^26.6.1",
     "@types/react": "^19.3.0",
     "oclif": "^6.0.0",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.1"
   }
 }
