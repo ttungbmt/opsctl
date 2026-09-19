@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-Ops CLI (`ops` command, repo `opsctl`) is in the **early scaffolding phase**: a pnpm workspace with the oclif CLI in `apps/cli` (`bin/run.js`, oclif config in its `package.json`). Only `ops --version` / `-v` works so far; there are no commands, build script, lint, or tests yet. Run the CLI with `pnpm ops <args>` from the root (or `node apps/cli/bin/run.js <args>`). `pnpm link:global` symlinks `~/.local/bin/ops` to `apps/cli/bin/run.js` so `ops` works from any directory (dev install — source changes apply immediately). The source of truth for intent is:
+Ops CLI (`ops` command, repo `opsctl`) is in the **early scaffolding phase**: a pnpm workspace with the oclif CLI in `apps/cli` (`bin/run.js`, oclif config in its `package.json`). Implemented: `ops --version` and `ops package install` (delegates to `mise bootstrap packages`; spec in `docs/superpowers/specs/2026-09-19-package-install-design.md`). Run the CLI with `pnpm ops <args>` from the root (or `node apps/cli/bin/run.js <args>`). `pnpm link:global` symlinks `~/.local/bin/ops` to `apps/cli/bin/run.js` so `ops` works from any directory (dev install — source changes apply immediately). The source of truth for intent is:
 
 - `README.md` — vision, architecture, command model, roadmap (v0.1 → v0.8+), MVP scope
 - `docs/features.md` — full planned feature list (partly Vietnamese)
@@ -15,6 +15,13 @@ When scaffolding, follow these docs, and update this file with real build/lint/t
 Releases: pushing a `v*` tag runs `.github/workflows/release.yml`, which `pnpm deploy`s `apps/cli` outside the workspace (oclif pack can't install deps for a package nested in a pnpm workspace), runs `oclif pack tarballs` (Node bundled) and uploads them to a GitHub Release. Users install with `mise use -g github:ttungbmt/opsctl`. Bump `version` in `apps/cli/package.json` to match the tag.
 
 Toolchain (Node LTS + pnpm 12) is pinned in `mise.toml`; run `mise install` after cloning.
+
+## Commands
+
+- `pnpm build` — compile `apps/cli/src` → `apps/cli/dist` (tsc); required before running the CLI
+- `pnpm test` — all tests (Vitest); single file: `pnpm --filter @ops/cli exec vitest run test/core/package/install.test.ts`
+- `pnpm ops <args>` — run the local build (the `ops` on PATH is the mise-installed release)
+- Code layout: `src/commands` (oclif, thin) → `src/core` → `src/providers` → `src/executor`; only `src/providers/mise-bootstrap.ts` knows mise's CLI/JSON. Relative imports need `.js` extensions (NodeNext). TS 7 needs `"types": ["node"]` in tsconfig for Node typings.
 
 ## Planned stack
 
