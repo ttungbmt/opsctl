@@ -22,12 +22,14 @@ jobs:
       - name: Deploy CLI outside the workspace
         run: pnpm --filter @ops/cli deploy "$RUNNER_TEMP/ops"
 
+      # mise's pnpm shim only resolves inside the repo, so run with the repo's toolchain.
       - name: Pack tarballs
-        working-directory: ${{ runner.temp }}/ops
         run: >-
-          ./node_modules/.bin/oclif pack tarballs --no-xz
+          mise exec -C "$GITHUB_WORKSPACE" --
+          "$RUNNER_TEMP/ops/node_modules/.bin/oclif" pack tarballs
+          --root "$RUNNER_TEMP/ops" --no-xz
           --targets linux-x64,linux-arm64,darwin-x64,darwin-arm64,win32-x64
-          --sha "$(git -C "$GITHUB_WORKSPACE" rev-parse --short HEAD)"
+          --sha "$(git rev-parse --short HEAD)"
 
       - name: Create GitHub release
         env:
