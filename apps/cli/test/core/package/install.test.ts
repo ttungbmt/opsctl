@@ -3,6 +3,7 @@ import {OpsError} from '../../../src/core/errors.js'
 import {type InstallDeps, type InstallOptions, installPackages} from '../../../src/core/package/install.js'
 import type {PackageSpec} from '../../../src/core/package/spec.js'
 import type {ApplyOptions, MiseBootstrap, PackageState} from '../../../src/providers/mise-bootstrap.js'
+import type {InstallToolOptions, MiseTools, ToolState} from '../../../src/providers/mise-tools.js'
 
 class FakeMise implements MiseBootstrap {
   calls: string[] = []
@@ -38,16 +39,47 @@ class FakeMise implements MiseBootstrap {
   }
 }
 
+class FakeTools implements MiseTools {
+  calls: string[] = []
+  installs: {names: string[]; opts: InstallToolOptions}[] = []
+  registry = new Set<string>()
+  installed = new Map<string, string>() // tool name -> version
+  installOnUse = true
+
+  async inRegistry(name: string) {
+    return this.registry.has(name)
+  }
+
+  async status(): Promise<ToolState[]> {
+    this.calls.push('status')
+    return [...this.installed].map(([name, version]) => ({installed: true, name, version}))
+  }
+
+  async install(names: string[], opts: InstallToolOptions) {
+    this.calls.push('install')
+    this.installs.push({names, opts})
+    if (this.installOnUse) for (const n of names) this.installed.set(n.replace(/@.*/, ''), '2.0')
+    return {exitCode: this.installOnUse ? 0 : 1}
+  }
+
+  async dryRun(names: string[]) {
+    this.calls.push('dryRun')
+    return names.map((n) => `would use ${n}`)
+  }
+}
+
 function setup(overrides: Partial<InstallDeps> = {}) {
   const mise = new FakeMise()
+  const tools = new FakeTools()
   const deps: InstallDeps = {
     detectManager: async () => 'apt',
     isTTY: true,
     mise,
     sudoReady: async () => true,
+    tools,
     ...overrides,
   }
-  return {deps, mise}
+  return {deps, mise, tools}
 }
 
 const opts = (o: Partial<InstallOptions>): InstallOptions => ({dryRun: false, json: false, nonInteractive: false, packages: [], yes: false, ...o})
@@ -148,5 +180,59 @@ describe('installPackages', () => {
     const {deps} = setup()
     expect(await codeOf(installPackages(opts({packages: [], yes: true}), deps))).toBe('INVALID_PACKAGE_NAME')
     expect(await codeOf(installPackages(opts({packages: ['--force'], yes: true}), deps))).toBe('INVALID_PACKAGE_NAME')
+  })
+
+  it('installs registry tools with mise use and system-preferred names with the OS manager', async () => {
+    const {deps, mise, tools} = setup()
+    tools.registry.add('fastfetch').add('zsh')
+    const result = await installPackages(opts({packages: ['fastfetch', 'zsh'], yes: true}), deps)
+    expect(tools.installs).toEqual([{names: ['fastfetch'], opts: {capture: false, nonInteractive: false}}])
+    expect(mise.applied.map((a) => a.specs)).toEqual([['apt:zsh']])
+    expect(result).toMatchObject({managers: ['mise', 'apt'], success: true})
+    expect(result.packages).toEqual([
+      {spec: 'mise:fastfetch', status: 'installed', version: '2.0'},
+      {spec: 'apt:zsh', status: 'installed', version: '1.0'},
+    ])
+  })
+
+  it('skips mise use for installed tools and keeps the version suffix out of the lookup', async () => {
+    const {deps, mise, tools} = setup()
+    tools.installed.set('jq', '1.8')
+    const result = await installPackages(opts({packages: ['mise:jq@1'], yes: true}), deps)
+    expect(tools.calls).toEqual(['status'])
+    expect(mise.calls).toEqual([])
+    expect(result.packages).toEqual([{spec: 'mise:jq@1', status: 'already-installed', version: '1.8'}])
+  })
+
+  it('marks tools still missing after mise use as failed', async () => {
+    const {deps, tools} = setup()
+    tools.registry.add('fastfetch')
+    tools.installOnUse = false
+    const result = await installPackages(opts({packages: ['fastfetch'], yes: true}), deps)
+    expect(result.packages).toEqual([{spec: 'mise:fastfetch', status: 'failed'}])
+    expect(result.success).toBe(false)
+  })
+
+  it('needs no confirmation or OS detection for tools only', async () => {
+    const {deps, tools} = setup({
+      detectManager: async () => {
+        throw new OpsError('UNSUPPORTED_PLATFORM', 'nope')
+      },
+      isTTY: false,
+    })
+    tools.registry.add('fastfetch')
+    const result = await installPackages(opts({json: true, packages: ['fastfetch']}), deps)
+    expect(result.success).toBe(true)
+    expect(tools.installs[0].opts).toEqual({capture: true, nonInteractive: false})
+  })
+
+  it('dry-run plans tools and system packages without writing', async () => {
+    const {deps, mise, tools} = setup()
+    tools.registry.add('fastfetch')
+    const result = await installPackages(opts({dryRun: true, packages: ['fastfetch', 'sl']}), deps)
+    expect(tools.calls).toEqual(['dryRun', 'status'])
+    expect(mise.calls).toEqual(['dryRun', 'status'])
+    expect(result.commands).toEqual(['would use fastfetch', 'would install apt:sl'])
+    expect(result.packages.map((p) => p.status)).toEqual(['would-install', 'would-install'])
   })
 })

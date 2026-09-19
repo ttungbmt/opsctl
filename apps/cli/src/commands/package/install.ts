@@ -5,16 +5,18 @@ import {renderInstallResult} from '../../core/output.js'
 import {type InstallResult, installPackages} from '../../core/package/install.js'
 import {execaRunner, sudoReady} from '../../executor/exec.js'
 import {createMiseBootstrap} from '../../providers/mise-bootstrap.js'
+import {createMiseTools} from '../../providers/mise-tools.js'
 import {detectSystemManager} from '../../providers/os.js'
 
 export default class PackageInstall extends Command {
-  static override summary = 'Install system packages'
+  static override summary = 'Install packages'
   static override description =
-    'Records packages in [bootstrap.packages] of the global mise config and installs the missing ones via `mise bootstrap packages`. Plain names use the OS package manager (apt or dnf); use manager:package to pick one (e.g. brew:jq).'
+    'A plain name is installed as a mise tool (`mise use -g`, recorded in [tools]) when the mise registry has it. Shells and base system packages (zsh, git, curl, …) and names missing from the registry go to the OS package manager (apt or dnf) via `mise bootstrap packages`, recorded in [bootstrap.packages]. Use manager:package to pick one (e.g. apt:fastfetch, brew:jq, mise:aqua:owner/repo).'
   static override examples = [
-    '<%= config.bin %> package install zsh',
+    '<%= config.bin %> package install fastfetch',
     '<%= config.bin %> package install zsh git --yes',
-    '<%= config.bin %> package install sl --dry-run',
+    '<%= config.bin %> package install jq sl --dry-run',
+    '<%= config.bin %> package install apt:fastfetch mise:aqua:BurntSushi/ripgrep',
     '<%= config.bin %> package install brew:jq --json --non-interactive',
   ]
   static override enableJsonFlag = true
@@ -22,7 +24,7 @@ export default class PackageInstall extends Command {
   static override strict = false
   // Shown in usage/help; the full list is read from argv (strict = false).
   static override args = {
-    packages: Args.string({description: 'Package names (apt/dnf picked from the OS) or manager:package (e.g. brew:jq)'}),
+    packages: Args.string({description: 'Package names (mise tool if in the registry, else apt/dnf) or manager:package (e.g. apt:zsh, mise:jq)'}),
   }
   static override flags = {
     'dry-run': Flags.boolean({default: false, summary: 'Show what would be installed without writing config or installing'}),
@@ -45,6 +47,7 @@ export default class PackageInstall extends Command {
         isTTY: Boolean(process.stdin.isTTY),
         mise: createMiseBootstrap(execaRunner),
         sudoReady: () => sudoReady(execaRunner),
+        tools: createMiseTools(execaRunner),
       },
     )
 

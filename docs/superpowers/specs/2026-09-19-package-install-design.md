@@ -103,6 +103,23 @@ interface InstallResult {
 
 A spec `apt:zsh` is installed iff `apt.packages[]` has `package == "zsh"` with `state == "installed"`; its version is `installed_version`. Unknown extra fields are ignored; a shape mismatch raises `MISE_BOOTSTRAP_UNAVAILABLE` with the Zod message.
 
+## Resolution (plain names)
+
+Revision 2026-09-19: mise tools are the default, because the registry covers many tools and gives newer builds (apt on Ubuntu has no `fastfetch`, for example).
+
+1. On `SYSTEM_PREFERRED` (`core/package/resolve.ts`: zsh, bash, fish, git, curl, wget, unzip, build-essential, ca-certificates, openssh-client, tmux) → OS manager (`apt:`/`dnf:`). Shells and base packages belong at system paths even when the registry has them.
+2. `mise registry <name>` exits 0 → mise tool `mise:<name>`, installed with `mise use -g <name>@latest` (recorded as `name = "latest"` in `[tools]`) by `providers/mise-tools.ts`.
+3. Otherwise → OS manager.
+
+Explicit prefixes skip resolution: `mise:<tool>` (backend ids too, e.g. `mise:aqua:owner/repo`) is a tool; any other prefix is a `mise bootstrap packages` manager. OS detection runs only when a spec needs it. Tools need no confirmation (`mise use` does not prompt or use sudo); `CONFIRMATION_REQUIRED` and the sudo check apply to system packages only.
+
+| Purpose (tools) | Command |
+|---|---|
+| Registry lookup | `mise registry <name>` (exit code) |
+| Current state | `mise ls -g --json` |
+| Declare + install | `mise use -g <name>@latest…` |
+| Preview | `mise use -g --dry-run <name>@latest…` (plan on stderr and stdout) |
+
 ## Detection
 
 `parseOsRelease` reads `ID` and `ID_LIKE` from `/etc/os-release`. Tokens `debian`/`ubuntu` → `apt`; `rhel`/`fedora`/`centos` → `dnf`. Anything else or a missing file → `UNSUPPORTED_PLATFORM`. Detection is skipped for inputs that all carry an explicit manager.

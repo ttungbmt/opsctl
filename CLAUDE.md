@@ -6,7 +6,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Ops CLI (`ops` command, repo `opsctl`) is in the **early scaffolding phase**: a pnpm workspace with the oclif CLI in `apps/cli` (`bin/run.js`, oclif config in its `package.json`). Implemented: `ops --version` and `ops package install` (delegates to `mise bootstrap packages`; spec in `docs/superpowers/specs/2026-09-19-package-install-design.md`). Run the CLI with `pnpm ops <args>` from the root (or `node apps/cli/bin/run.js <args>`). `pnpm link:global` symlinks `~/.local/bin/ops` to `apps/cli/bin/run.js` so `ops` works from any directory (dev install — source changes apply immediately). The source of truth for intent is:
 
-- `README.md` — vision, architecture, command model, roadmap (v0.1 → v0.8+), MVP scope
+- `README.md` — overview, install, links to detailed docs
+- `docs/vision.md` — why, goals, long-term vision
+- `docs/architecture.md` — stack, layers, principles, providers, execution, config, safety, repo structure
+- `docs/commands.md` — command model, global flags, planned command groups
+- `docs/roadmap.md` — roadmap (v0.1 → v0.8+), MVP scope
 - `docs/features.md` — full planned feature list (partly Vietnamese)
 - `docs/cheatsheet.md` — condensed stack, principles, naming/provider/execution/safety rules, development order
 
@@ -21,7 +25,7 @@ Toolchain (Node LTS + pnpm 12) is pinned in `mise.toml`; run `mise install` afte
 - `pnpm build` — compile `apps/cli/src` → `apps/cli/dist` (tsc); required before running the CLI
 - `pnpm test` — all tests (Vitest); single file: `pnpm --filter @ops/cli exec vitest run test/core/package/install.test.ts`
 - `pnpm ops <args>` — run the local build (the `ops` on PATH is the mise-installed release)
-- Code layout: `src/commands` (oclif, thin) → `src/core` → `src/providers` → `src/executor`; only `src/providers/mise-bootstrap.ts` knows mise's CLI/JSON. Relative imports need `.js` extensions (NodeNext). TS 7 needs `"types": ["node"]` in tsconfig for Node typings.
+- Code layout: `src/commands` (oclif, thin) → `src/core` → `src/providers` → `src/executor`; only `src/providers/mise-bootstrap.ts` (system packages) and `src/providers/mise-tools.ts` (mise tools) know mise's CLI/JSON. `package install` resolves plain names in `src/core/package/resolve.ts`: system-preferred list → apt/dnf, else mise registry → tool, else apt/dnf. Relative imports need `.js` extensions (NodeNext). TS 7 needs `"types": ["node"]` in tsconfig for Node typings.
 
 ## Planned stack
 
