@@ -2,8 +2,7 @@
 
 Date: 2026-09-20 · Status: planned
 
-Builds on [`2026-09-20-profile-bootstrap-design.md`](2026-09-20-profile-bootstrap-design.md)
-and [`2026-09-20-apt-repo-design.md`](2026-09-20-apt-repo-design.md).
+Builds on [`2026-09-20-profile-bootstrap-design.md`](2026-09-20-profile-bootstrap-design.md).
 Supersedes that spec's **`--dry-run` needs mise** risk.
 
 ## Problem
@@ -18,18 +17,12 @@ $ ops bootstrap dev
  ›   Code: MISE_BOOTSTRAP_UNAVAILABLE
 ```
 
-The profile-bootstrap design saw this and accepted it:
-
-> **`--dry-run` needs mise.** […] mise is the CLI's own prerequisite, so this is
-> acceptable as long as the user sees that message rather than a stack trace.
-
-The justification came from the first package spec: *"ops is itself installed
-through mise, so mise is always present."* That is true only while ops has
-exactly one install path. `README.md` documents exactly one, so the assumption
-holds today — and that is the thing worth changing. ops ships as a self-contained
-tarball with Node bundled; it can run the moment it is extracted. Requiring the
-user to install mise first makes ops the second thing they install rather than
-the first.
+The profile-bootstrap design saw this and accepted it, resting on the first
+package spec's assumption: *"ops is itself installed through mise, so mise is
+always present."* That holds only while ops has exactly one install path, and
+`README.md` documents exactly one. ops ships as a self-contained tarball with
+Node bundled; it runs the moment it is extracted. Requiring mise first makes ops
+the second thing a user installs rather than the first.
 
 There is also an asymmetry worth naming. Phase 1 already fixed the case where a
 *target* tool is missing at plan time — `assumeInstalled` exists so the `setup`
@@ -49,212 +42,320 @@ works on a machine with nothing on it. ops is the only thing you download.
 
 ### A preflight, not a section
 
-`ops bootstrap` gains a preflight step that runs **before** the section plan
-pass, with **its own confirmation gate**. It is deliberately not a section in
-`SECTION_ORDER`.
+`ops bootstrap` gains a preflight that runs **before** the section plan pass,
+with **its own confirmation gate**. It is deliberately not a section in
+`SECTION_ORDER`, and it lives in the command layer rather than inside
+`bootstrapProfile`.
 
 The engine's defining invariant is that it plans every declared section before
 applying any, which is what lets one confirmation cover the whole run. A
 prerequisites *section* would have to apply before the later sections could
-plan, breaking exactly that. Rather than weaken the invariant for one package,
-the preflight sits outside the engine and owns its own small gate. `run.ts` and
-`section.ts` are untouched.
+plan, breaking exactly that. A `deps.preflight?` hook inside the engine would
+keep the letter of the invariant and break its spirit — `bootstrapProfile` would
+become a thing that installs software before planning anything. Keeping it in
+the command makes the asymmetry visible at the one place that knows this is
+`ops bootstrap`, and leaves `run.ts` and `test/core/bootstrap/run.test.ts`
+untouched. That the existing engine tests still pass unedited is the evidence
+the invariant held.
 
-That does mean a bare machine sees two gates: one for mise, one for the profile.
-That is the honest shape of the problem — you cannot consent to a plan that
-cannot be computed yet.
+A bare machine therefore sees two gates. That is the honest shape of the
+problem: you cannot consent to a plan that cannot be computed yet.
 
-### Installed from mise's own apt repository
+### Installed with mise's own installer, run as argv
 
 ops cannot install mise through `mise bootstrap packages`; that is the loop
-itself. Three channels were checked live:
+itself. Three channels were examined, and the installer script was read in full
+(370 lines) rather than assumed about.
 
 | Channel | Verdict |
 |---|---|
-| `https://mise.jdx.dev/deb` (200, `Suite: stable`, `Components: main`) | **Chosen** |
-| `https://mise.jdx.dev/mise-latest-linux-x64` (200) | Rejected |
-| `curl https://mise.run \| sh` | Rejected |
+| `https://mise.run`, downloaded then executed | **Chosen** |
+| `https://mise.jdx.dev/deb` apt repository | Rejected — see below |
+| `https://mise.jdx.dev/mise-latest-linux-x64` raw binary | Rejected — no checksum, no arch logic |
 
-The apt repo wins because `src/providers/apt-repo.ts` already does all of it:
-writes `/etc/apt/{keyrings,sources.list.d,preferences.d}/ops-mise.*`, runs
-`apt-get update`, and proves with `apt-cache policy` that apt's candidate really
-comes from the repo. Afterwards mise is an ordinary apt package with an ordinary
-update path. Ubuntu ships no `mise` package, so no pin is needed.
+**No rule is bent to do this.** The project rule is *argv arrays, never shell
+strings*. What violates it is the pipe, not the installer:
 
-The standalone binary was rejected because it would land in `~/.local/bin`,
-which is not guaranteed to be on PATH — installing a tool the user then cannot
-invoke is the exact failure this project keeps designing against.
-
-`curl | sh` was rejected because it violates a hard project rule: processes run
-through the executor with argv arrays, never shell strings. A tool whose job is
-to make machine setup auditable should not normalise piping a remote script into
-a shell, and ops could not describe what such a script would do under
-`--dry-run`.
-
-### Every command that needs mise
-
-`bootstrap`, `tool install` and `tool uninstall` all reach for mise immediately,
-so all three run the preflight. `tool setup` does not — it only runs a recipe's
-`check`/`run` commands through the executor.
-
-The cost is that `ops tool install jq` can now write under `/etc/apt`. The gate
-is what keeps that from being a surprise, and when mise is already present the
-preflight probes once and returns, so a normal machine sees no difference at
-all.
-
-### The repo needs a recipe to reference it
-
-`recipeIndex` throws `CONFIG_INVALID` for any `repo.<name>` no recipe
-references — that check is how a misspelled `repo:` key surfaces at all. So
-`repo.mise` alone would break every command at config load. `tool.mise` ships
-with it:
-
-```yaml
-repo:
-  mise:
-    uri: https://mise.jdx.dev/deb
-    suite: stable
-    components: [main]
-    keyring: https://mise.jdx.dev/gpg-key.pub
-
-tool:
-  mise:
-    summary: The tool and runtime manager ops itself runs on
-    package: apt:mise
-    repo: mise
+```
+sh -c "curl https://mise.run | sh"        ← a shell string. Forbidden, rightly.
 ```
 
-This is not a workaround. The recipe is true — `apt:mise` really is the package,
-served by that repo — and it makes `ops tool install mise` meaningful for a user
-who installed mise by hand and wants it apt-managed. The preflight reads both
-from the config through `recipeIndex` rather than hard-coding them, so the URLs
-stay data.
+ops does not need the pipe. It downloads the script with `fetchDownload` — the
+same HTTPS download, with progress, that `deb.ts` already uses — and then runs
+it as argv:
 
-### Absent, not broken
+```ts
+['sudo', 'env', `MISE_INSTALL_PATH=${path}`, 'sh', downloaded]
+```
 
-The probe is `mise --version`. `CommandNotFoundError` means absent; a non-zero
-exit means mise is present but unhappy, which this preflight deliberately does
-not touch. Installing over a broken mise would replace one confusing failure
-with another.
+Downloading before executing is the same trust decision and a strictly better
+mechanism: `curl | sh` feeds a shell bytes as they arrive, so a connection that
+drops mid-transfer executes half a script. A file that failed to download
+completely simply does not run. `env` sits inside the argv because `sudo` resets
+the environment.
+
+**What the script does, verified by reading it:**
+
+- **sha256 checksums** (lines 126-151): pinned constants for the current
+  release, fetched from GitHub releases otherwise. Not an unverified download.
+- **`MISE_INSTALL_PATH`** (line 282) overrides the `$HOME/.local/bin/mise`
+  default, so ops can place mise where every shell will find it.
+- **Platform coverage** (lines 49-80): linux and macOS; x64, arm64 and armv7;
+  detects musl; handles Android/Termux. ops supports apt *and* dnf, and this
+  covers both.
+- **`MISE_INSTALL_SKIP_IF_EXISTS`** (lines 289-294): idempotency upstream.
+
+**Why not the apt repository.** It was the first choice and it was wrong. Its
+appeal was reusing `apt-repo.ts` wholesale, with GPG-signed packages and an
+`apt-cache policy` proof that the candidate comes from the right origin — a
+genuinely stronger integrity story than TLS. Against it: it covers apt only,
+leaving every dnf machine with nothing; it needs a new `system.install()`; and
+it cannot ship `repo.mise` without also shipping a `tool.mise` recipe, purely
+because `recipeIndex` rejects a repo no recipe references. That last one is
+config existing to satisfy an unrelated invariant. The installer route deletes
+all three problems and adds no code beyond one small provider.
+
+**Installed to `/usr/local/bin/mise`, with sudo.** It is on every default PATH,
+so the rest of the bootstrap — and every later shell — finds mise immediately.
+The alternative, `~/.local/bin`, avoids sudo but is only on PATH after a login
+that saw the directory exist, which is the classic "installed but not reachable"
+trap this project keeps designing against.
+
+The cost is stated plainly: **ops runs a TLS-only script as root.** mise.run
+carries no signature (the script itself notes `TODO: verify with minisign or gpg`
+for its non-pinned path). Pinning the script's own hash is not viable — it
+changes with every mise release, since it embeds that release's checksums. The
+mitigations are that the URL is config data shown in the plan before the gate,
+and that the download is complete-or-nothing. This was a deliberate choice, not
+an oversight.
+
+### Commands that get the preflight
+
+| Command | Preflight | Why |
+|---|---|---|
+| `ops bootstrap` | **Yes** | It is the command that promises a working machine. |
+| `ops tool install` | **Yes** | As dead as bootstrap on a bare machine: `installSystem`'s first statement is `mise.declare(specs)`, and `resolveSpecs` calls `tools.inRegistry` before that. For a tarball user this is the first thing they type. |
+| `ops tool setup` | No | It never runs mise; every subprocess is a recipe's own `check`/`run` argv. |
+| `ops tool uninstall` | **No** | It does reach for mise, but installing a tool in order to remove something is incoherent — with no mise on the machine, nothing mise-managed can be installed. The existing error is the honest answer. |
+
+`--no-preflight` (`allowNo`, default true) restores today's behaviour on both
+commands that have it, the same escape hatch `--skip <section>` gives for an
+unsupported section.
+
+### Absent, unhealthy, present
+
+The probe is `mise --version`, spawned, with `stdin: 'ignore'`,
+`stdout: 'capture'` and a timeout. Three states, not a boolean:
+
+```ts
+export type MiseState =
+  | {state: 'present'; version: string}
+  | {state: 'unhealthy'; exitCode: number; detail: string}
+  | {state: 'absent'}
+```
+
+Only `CommandNotFoundError` means absent. A non-zero exit means mise exists and
+is broken — installing over it would be the wrong repair, and whichever provider
+needs it will fail in its own more specific words, including the
+`unrecognized subcommand` heuristic already in `mise-bootstrap.ts:58-66`.
+
+Spawning is the only faithful probe. A PATH walk in core answers a different
+question: it cannot see the exec bit, a dangling shim, or an unreadable
+interpreter. It also belongs in a provider, because providers own subprocesses.
+
+It needs its own file. `mise-bootstrap.ts` and `mise-tools.ts` each hard-prefix
+every call (`['bootstrap','packages',…]`, `['-C','/',…]`) and, more decisively,
+both translate `CommandNotFoundError` into `MISE_BOOTSTRAP_UNAVAILABLE` at the
+moment it happens — destroying the very missing-versus-broken distinction the
+preflight needs. Those throw sites are correct for their callers and stay.
 
 ### Verify by probing again
 
-After `repos.ensure` and `system.install`, the preflight probes a second time and
-throws `MISE_INSTALL_FAILED` if mise is still absent. An exit code is a claim;
-the probe is the evidence. This is the same rule `installPackages` follows when
-it re-reads `mise.status()` rather than trusting `apply`.
+After the installer runs, the preflight probes a second time and fails if mise
+is still absent. An exit code is a claim; the probe is the evidence. This is the
+rule `installPackages` already follows when it re-reads `mise.status()` rather
+than trusting `apply`.
 
 ## Shape of the code
 
 ```ts
-// src/providers/mise.ts
-export interface MisePresence {present: boolean; version?: string}
-export interface MiseProbe {probe(): Promise<MisePresence>}
-export function createMiseProbe(runner: Runner): MiseProbe
+// src/providers/mise-presence.ts
+export type MiseState = …
+export const PROBE_TIMEOUT_MS = 10_000
+export function probeMise(runner: Runner, timeout?: number): Promise<MiseState>
 
-// src/providers/system.ts -- added to SystemPackages
-install(specs: PackageSpec[], opts: InstallOptions): Promise<{exitCode: number}>
-describeInstall(specs: PackageSpec[]): string[]
+// src/providers/mise-install.ts
+export interface MiseInstallOptions {
+  nonInteractive: boolean
+  capture: boolean
+  onProgress?: OnProgress
+  onStage?: (stage: Stage) => void
+}
+export interface MiseInstaller {
+  /** What install would run, for --dry-run. No I/O. */
+  describe(): string[]
+  /** Downloads the installer, then runs it as argv. Never a shell string. */
+  install(opts: MiseInstallOptions): Promise<void>
+}
+export function createMiseInstaller(runner: Runner, source: MiseSource): MiseInstaller
 
-// src/core/preflight/mise.ts
+// src/core/change.ts  -- moved out of bootstrap/section.ts
+export type ChangeStatus = 'satisfied' | 'changed' | 'would-change' | 'skipped' | 'failed'
+export interface Change {…}
+
+// src/core/preflight.ts
 export interface PreflightResult {
   action: 'preflight'
-  /** True when mise was already there; the caller prints nothing. */
+  dryRun: boolean
+  /** True when mise is on PATH now. False only after a dry run that would have installed it. */
   satisfied: boolean
-  success: boolean
   changes: Change[]
-  /** Dry run only. */
   commands?: string[]
 }
-export async function ensureMise(options: PreflightOptions, deps: PreflightDeps): Promise<PreflightResult>
-```
-
-`system.install`'s argv matches the path mise already uses, and puts `env` inside
-the argv because `sudo` filters the environment:
-
-```ts
-['sudo', 'env', 'DEBIAN_FRONTEND=noninteractive', 'apt-get', 'install', '-y', '--', ...names]
+export function ensureMise(options: PreflightOptions, deps: PreflightDeps): Promise<PreflightResult>
 ```
 
 `Change` and `ChangeStatus` move from `src/core/bootstrap/section.ts` to
-`src/core/change.ts`, which `section.ts` re-exports. `tool install` must not
-import from `core/bootstrap/` — it bootstraps nothing — and a unit of convergence
-was never a bootstrap-specific idea.
+`src/core/change.ts`, which `section.ts` re-exports. `ChangeStatus`'s own comment
+already calls itself the cross-cutting vocabulary, and a preflight maps onto it
+exactly; what would be wrong is `tool install` importing from `core/bootstrap/`,
+since it bootstraps nothing. Every existing import keeps compiling.
 
 ### Flow
 
 ```
 probe()
-  ├─ present ────────────────────────────→ satisfied, print nothing, carry on
+  ├─ present ──────────────────────────────→ satisfied, print nothing, carry on
+  ├─ unhealthy ────────────────────────────→ skipped, carry on; not this preflight's repair
   └─ absent
-       ├─ manager is not apt ────────────→ UNSUPPORTED_PLATFORM, with manual instructions
-       ├─ --dry-run ─────────────────────→ "would install mise" + commands, stop, exit 0
-       ├─ pending, no --yes, (--json or no TTY) → CONFIRMATION_REQUIRED
-       ├─ --non-interactive without ready sudo  → SUDO_PASSWORD_REQUIRED
+       ├─ --dry-run ─────────────────────────→ "would install mise" + commands, halt, exit 1
+       ├─ no --yes and (--json or no TTY) ───→ CONFIRMATION_REQUIRED
+       ├─ --non-interactive, sudo not ready ─→ SUDO_PASSWORD_REQUIRED
        │
-       onPlan(changes)
-       repos.ensure(repo.mise, "mise")   ← keyring, sources, pin, apt-get update, apt-cache policy
-       system.install(["apt:mise"])
-       probe()  ← still absent → MISE_INSTALL_FAILED
-       └────────────────────────────────→ carry on to the profile plan
+       onPlan(changes)          ← the command is printed before it runs
+       fetchDownload(installer) ← complete-or-nothing
+       sudo env MISE_INSTALL_PATH=… sh <file>
+       probe() again            ← still absent → MISE_BOOTSTRAP_UNAVAILABLE
+       └─────────────────────────────────────→ carry on to the profile plan
 ```
+
+`BootstrapResult` gains one optional `preflight?: PreflightResult`, attached by
+the command layer, never by the engine — a preflight is not a section, so its
+change never enters `counts`. A pure `haltedBeforePlan(profile, options, preflight)`
+in `run.ts` builds the result for a run that stopped in preflight, so `--json`
+stays a single document with one definition of its shape.
+
+**`--dry-run` on a bare machine exits 1.** It cannot compute the section plans,
+because every section probe is a mise call. `run.ts` already states the rule a
+dry run follows — it fails when a plan could not be computed, because printing
+findings beside exit 0 lies. Here *no* plan could be computed, so ops prints the
+preflight plan, says plainly why the rest is missing, and exits 1.
 
 ### Idempotency
 
-The preflight is inspect → compare → plan → apply → verify like everything else,
-and its compare step is a single cheap probe. On a machine that has mise — which
-is every machine after the first run — it does nothing and says nothing.
+The preflight is inspect → compare → plan → apply → verify, and its compare step
+is one cheap probe. On a machine that has mise — every machine after the first
+run — it does nothing, calls nothing, and prints nothing.
 
 ### Error codes
 
-New: `MISE_INSTALL_FAILED`, `INSTALL_UNAVAILABLE`.
-Reused: `UNSUPPORTED_PLATFORM`, `CONFIRMATION_REQUIRED`, `SUDO_PASSWORD_REQUIRED`,
-`REPO_SETUP_FAILED`, `REPO_PIN_UNSATISFIED`.
+No new codes. `CONFIRMATION_REQUIRED`, `SUDO_PASSWORD_REQUIRED`,
+`DOWNLOAD_FAILED` (from `deb.ts`'s `fetchDownload`) and
+`MISE_BOOTSTRAP_UNAVAILABLE` (for "installed, but mise is still not on PATH")
+already mean exactly what is needed. A second code for an existing condition
+would force callers to match two.
 
-`system.ts`'s error wrapper currently hard-codes *"ops cannot remove {manager}
-packages here"*. It takes the verb now, so install failures do not claim to be
-removals.
+### Config data
+
+```yaml
+# defaults.yaml
+mise:
+  # Where ops gets mise when a machine has none. It cannot use `mise bootstrap
+  # packages` for this -- that is the loop itself. ops downloads this script and
+  # runs it as argv rather than piping it into a shell: same trust, but a
+  # truncated download cannot half-execute.
+  installer: https://mise.run
+  # /usr/local/bin is on every default PATH, so the rest of the bootstrap and
+  # every later shell find mise immediately. ~/.local/bin is only on PATH after a
+  # login that saw the directory exist.
+  path: /usr/local/bin/mise
+```
 
 ## Rejected alternatives
+
+**mise's apt repository.** Stronger integrity (GPG, `apt-cache policy`), but
+apt-only, needs `system.install()`, and cannot ship without a `tool.mise` recipe
+whose only job is to satisfy `recipeIndex`'s unreferenced-repo guard. See
+*Decisions*.
+
+**`curl https://mise.run | sh`.** Same script, worse mechanism: it is a shell
+string, and it lets a partial download execute.
+
+**The raw binary at `mise.jdx.dev/mise-latest-linux-x64`.** No checksum, no arch
+or libc detection — ops would have to reimplement what the script already does.
 
 **A `prerequisites` section at the head of `SECTION_ORDER`.** It would have to
 apply before the other sections could plan, turning one plan pass into
 plan-apply-plan and ending "one plan for the whole run".
 
-**A separate `ops doctor --fix`.** It is on the roadmap and would be a fine home
-for this eventually, but it does not exist, and building a command group to
-answer "bootstrap should work on a bare machine" is the wrong order.
-
-**Leaving it as a clear error.** That is today's behaviour, and it is defensible
-— right up until ops is something you can download and run. Once the tarball path
-is documented, the error is a dead end the tool could have walked past.
+**A separate `ops doctor --fix`.** On the roadmap and eventually the right home,
+but building a command group to answer "bootstrap should work on a bare machine"
+is the wrong order.
 
 ## Risks
 
-**apt only.** mise publishes an rpm repo (`https://mise.jdx.dev/rpm`, verified
-200) but ops has no dnf-repo provider, and writing one is a separate piece of
-work. dnf machines get `UNSUPPORTED_PLATFORM` naming the manual install. This
-keeps the preflight from being the thing that drags a whole new provider in.
+**The installer needs `curl` or `wget`, and a minimal image has neither.**
+Verified: `ubuntu:24.04` ships `sha256sum` but no `curl` and no `wget`, and the
+script (lines 246-256) errors without one. Real Ubuntu, Debian and Fedora
+installs include them, so the user-facing scenario is covered; container images
+are the gap. ops downloads the *script* itself with Node's fetch, so this affects
+only the tarball the script then pulls. The failure is loud and the message is
+the script's own. This is the one place the apt route was genuinely more robust,
+and it is the reason to revisit if minimal images become a target.
 
-**`--dry-run` cannot show the profile plan on a bare machine.** The preflight
-reports what it would do and stops, because `plan()` needs mise. Exit 0 — nothing
-failed, the picture is just incomplete, and ops says so rather than pretending.
+**ops runs a TLS-only script as root.** See *Decisions*. Not pinnable, mitigated
+by showing the URL before the gate and by complete-or-nothing download.
 
-**The preflight installs before the profile plan is shown.** It has its own gate,
-so nothing is installed unseen, but it genuinely is a second gate and a partial
-break of the one-plan promise. Confining it to exactly one package is what keeps
-the cost proportionate.
+**The `--dry-run` hole.** On a bare machine `ops bootstrap --dry-run` can never
+show the section plan. The alternatives are worse: installing under `--dry-run`
+breaks the flag; synthesising a plan from the profile's name lists would be a
+fabrication; exiting 0 would tell a script "nothing to see". A cautious user
+takes two steps on a bare machine, and `--no-preflight` restores today's
+behaviour.
 
-**`ops tool install <x>` can now configure an apt repo.** A consequence of
-running the preflight on every command that needs mise. Only ever for mise, only
-when mise is absent, and only through the gate.
+**Installing before the profile plan is shown.** The preflight has its own gate,
+so nothing is installed unseen under `--json` or a pipe. But on a TTY this
+project's house style treats *printing* the plan as consent — there is no
+interactive prompt anywhere in the codebase — so an interactive user gets mise
+installed without typing anything. The preflight inherits that weakness rather
+than introducing it, and it is the sharpest instance of it. If ops ever grows a
+real prompt, this is the first place it belongs.
+
+**`ops tool install jq` can now install mise.** A consequence of putting the
+preflight on every command that needs mise. Only ever mise, only when absent,
+and only through the gate.
+
+**Two mises.** A user whose mise came from `curl https://mise.run | sh` has one
+at `~/.local/bin/mise`; ops installs to `/usr/local/bin/mise`. The probe would
+find the existing one first and do nothing, so this only arises if the older one
+is not on PATH — in which case installing is correct. Worth a README line.
+
+**Stale messages elsewhere.** The three sites that say *"mise not found on PATH;
+install it from https://mise.jdx.dev"* (`mise-bootstrap.ts:52-56`,
+`mise-tools.ts:66-70`, `mise-config.ts:190-193`) now understate the options; they
+should also mention `ops bootstrap`. Cheap, and it closes the loop for anyone who
+reaches them via `--no-preflight` or `ops tool setup`.
+
+**`ops tool uninstall mise` is not guarded.** Out of scope here, but it would
+cheerfully remove the tool ops runs on.
 
 ## Out of scope
 
 - **mise present but too old.** `mise-bootstrap.ts` detects it with a stderr
-  regex (`/unrecognized subcommand/`) rather than a version comparison, and
-  `mise-tools.ts` has no such branch at all. Worth fixing; not this.
-- **mise present but not shell-activated**, so a tool ops installs is not on the
-  user's PATH. The likelier everyday failure, and a different design.
-- A dnf repo provider.
+  regex rather than a version comparison, and `mise-tools.ts` has no such branch.
+  Worth fixing; not this.
+- **mise present but not shell-activated**, so tools ops installs are not on the
+  user's PATH. The likelier everyday failure, and a different design. The
+  preflight will print one advisory line after installing mise, and nothing more.
+- A guard on removing mise.
 - `ops doctor` / `ops system doctor`.
