@@ -15,6 +15,9 @@
   "oclif": {
     "bin": "ops",
     "topics": {
+      "profile": {
+        "description": "Inspect machine profiles"
+      },
       "tool": {
         "description": "Install, configure and remove tools"
       }
