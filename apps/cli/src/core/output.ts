@@ -1,6 +1,7 @@
 import type {OnProgress} from '../providers/deb.js'
 import type {BootstrapResult} from './bootstrap/run.js'
 import type {Change, ChangeStatus, SectionPlan} from './bootstrap/section.js'
+import type {MiseReach} from '../providers/mise-presence.js'
 import type {PreflightResult} from './preflight.js'
 import type {ProfileSummary, ResolvedProfile} from './profile/resolve.js'
 import {type Style, plainStyle} from './style.js'
@@ -357,4 +358,18 @@ export function renderPreflightPlan(changes: Change[], style: Style = plainStyle
   const width = column(changes.map((c) => c.id))
   const rows = changes.map((c) => `  ${c.id.padEnd(width)}  ${style.muted(c.command ?? '')}`.trimEnd())
   return [style.heading('Preflight:'), ...rows, '']
+}
+
+/**
+ * Shown after a run that installed mise tools the shell cannot reach. Either route is enough
+ * -- the shell hook or the shims directory on PATH -- so this stays silent unless both are
+ * missing, and silent again when mise could not be asked.
+ */
+export function renderMiseReachNote(reach: MiseReach | undefined, style: Style = plainStyle): string[] {
+  if (!reach || reach.activated || reach.shimsOnPath) return []
+  return [
+    '',
+    style.muted('note: mise is not activated and its shims are not on PATH, so the tools it just'),
+    style.muted('installed are not callable yet. Run `mise activate bash` (or see https://mise.jdx.dev).'),
+  ]
 }

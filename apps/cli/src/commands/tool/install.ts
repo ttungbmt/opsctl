@@ -6,11 +6,13 @@ import {
   downloadProgress,
   renderInstallResult,
   renderPreflight,
+  renderMiseReachNote,
   renderPreflightPlan,
   stageReporter,
 } from '../../core/output.js'
 import {styleFor} from '../../core/style.js'
 import {type InstallOptions, type InstallResult, haltedBeforeInstall, installPackages} from '../../core/package/install.js'
+import {isToolSpec} from '../../core/package/spec.js'
 import {type PreflightResult, ensureMise} from '../../core/preflight.js'
 import {recipeIndex} from '../../core/tool/recipe.js'
 import {execaRunner, sudoReady} from '../../executor/exec.js'
@@ -18,7 +20,7 @@ import {createAptRepoProvider} from '../../providers/apt-repo.js'
 import {createDebInstaller} from '../../providers/deb.js'
 import {createMiseBootstrap} from '../../providers/mise-bootstrap.js'
 import {createMiseInstaller} from '../../providers/mise-install.js'
-import {probeMise} from '../../providers/mise-presence.js'
+import {probeMise, probeMiseReach} from '../../providers/mise-presence.js'
 import {createMiseTools} from '../../providers/mise-tools.js'
 import {detectSystemManager} from '../../providers/os.js'
 
@@ -144,6 +146,13 @@ export default class ToolInstall extends Command {
     stopSpinner()
     if (preflight) result.preflight = preflight
     if (!this.jsonEnabled()) for (const line of renderInstallResult(result, styleFor(this.jsonEnabled()))) this.log(line)
+
+    // Only worth asking after a run that actually put mise tools on the machine.
+    const installedTools = result.packages.some((p) => isToolSpec(p.spec) && p.status === 'installed')
+    if (result.success && installedTools && !this.jsonEnabled()) {
+      for (const line of renderMiseReachNote(await probeMiseReach(execaRunner), styleFor(false))) this.log(line)
+    }
+
     if (!result.success) process.exitCode = 1
     return result
   }

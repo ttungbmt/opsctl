@@ -1,5 +1,5 @@
 import {describe, expect, it} from 'vitest'
-import {PROBE_TIMEOUT_MS, probeMise} from '../../src/providers/mise-presence.js'
+import {PROBE_TIMEOUT_MS, probeMise, probeMiseReach} from '../../src/providers/mise-presence.js'
 import {FakeRunner} from '../helpers/fake-runner.js'
 
 describe('probeMise', () => {
@@ -41,5 +41,40 @@ describe('probeMise', () => {
       },
     }
     await expect(probeMise(runner)).rejects.toThrow(boom)
+  })
+})
+
+const DOCTOR = JSON.stringify({activated: true, shims_on_path: true, other: 'ignored'})
+
+describe('probeMiseReach', () => {
+  it('reports both axes from mise doctor', async () => {
+    const runner = new FakeRunner().on('mise doctor --json', {stdout: DOCTOR})
+    expect(await probeMiseReach(runner)).toEqual({activated: true, shimsOnPath: true})
+  })
+
+  it('reads shims and activation independently', async () => {
+    // A machine with shims on PATH but no shell hook works fine; so does the reverse.
+    const runner = new FakeRunner().on('mise doctor --json', {
+      stdout: JSON.stringify({activated: false, shims_on_path: true}),
+    })
+    expect(await probeMiseReach(runner)).toEqual({activated: false, shimsOnPath: true})
+  })
+
+  it('says nothing it cannot prove', async () => {
+    // An older mise has no --json. Nagging on a failed probe is worse than silence.
+    expect(await probeMiseReach(new FakeRunner().on('mise doctor --json', {exitCode: 1}))).toBeUndefined()
+    expect(await probeMiseReach(new FakeRunner().on('mise doctor --json', {stdout: 'not json'}))).toBeUndefined()
+    expect(await probeMiseReach(new FakeRunner().on('mise doctor --json', {stdout: '{"activated": 1}'}))).toBeUndefined()
+    expect(await probeMiseReach(new FakeRunner().missing('mise'))).toBeUndefined()
+  })
+
+  it('probes without prompting or printing', async () => {
+    const runner = new FakeRunner().on('mise doctor --json', {stdout: DOCTOR})
+    await probeMiseReach(runner)
+    expect(runner.calls[0]).toEqual({
+      cmd: 'mise',
+      args: ['doctor', '--json'],
+      opts: {stdin: 'ignore', stdout: 'capture', timeout: PROBE_TIMEOUT_MS},
+    })
   })
 })

@@ -1,6 +1,6 @@
 import ansis from 'ansis'
 import {describe, expect, it} from 'vitest'
-import {downloadProgress, renderBootstrapPlan, renderBootstrapResult, renderInstallResult, renderPreflight, renderPreflightPlan, renderProfileList, renderProfileShow, renderSetupPlan, renderSetupResult, renderUninstallPlan, renderUninstallResult, stageReporter} from '../../src/core/output.js'
+import {downloadProgress, renderBootstrapPlan, renderBootstrapResult, renderInstallResult, renderMiseReachNote, renderPreflight, renderPreflightPlan, renderProfileList, renderProfileShow, renderSetupPlan, renderSetupResult, renderUninstallPlan, renderUninstallResult, stageReporter} from '../../src/core/output.js'
 import type {BootstrapResult} from '../../src/core/bootstrap/run.js'
 import type {PreflightResult} from '../../src/core/preflight.js'
 import {ansiStyle, plainStyle} from '../../src/core/style.js'
@@ -549,5 +549,26 @@ describe('renderPreflightPlan', () => {
       '  mise  sudo env ... sh <installer>',
       '',
     ])
+  })
+})
+
+describe('renderMiseReachNote', () => {
+  it('warns only when neither route to the tools exists', () => {
+    expect(renderMiseReachNote({activated: false, shimsOnPath: false})).toEqual([
+      '',
+      'note: mise is not activated and its shims are not on PATH, so the tools it just',
+      'installed are not callable yet. Run `mise activate bash` (or see https://mise.jdx.dev).',
+    ])
+  })
+
+  it('says nothing when either route works', () => {
+    // Shims on PATH is a complete setup; so is the shell hook. Warning would be a false alarm.
+    expect(renderMiseReachNote({activated: false, shimsOnPath: true})).toEqual([])
+    expect(renderMiseReachNote({activated: true, shimsOnPath: false})).toEqual([])
+    expect(renderMiseReachNote({activated: true, shimsOnPath: true})).toEqual([])
+  })
+
+  it('says nothing when mise could not answer', () => {
+    expect(renderMiseReachNote(undefined)).toEqual([])
   })
 })
