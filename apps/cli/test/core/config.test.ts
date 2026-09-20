@@ -8,16 +8,44 @@ import {recipeIndex} from '#core/tool/recipe.js'
 
 const DEFAULTS = 'package:\n  system: [zsh, tmux]\n'
 
-/** Serves the defaults at /defaults.yaml and the user config (if any) at /user.yaml. */
-function files(user?: string, defaults = DEFAULTS) {
-  return async (path: string) => {
-    if (path === '/defaults.yaml') return defaults
-    if (path === '/user.yaml' && user !== undefined) return user
-    throw Object.assign(new Error('missing'), {code: 'ENOENT'})
+type Catalog = Record<string, string>
+
+/**
+ * Serves the defaults at /defaults.yaml, the user config (if any) at /user.yaml, and catalog
+ * entries at /repo/<name>.yaml and /tool/<name>.yaml -- the layout loadConfig derives from
+ * dirname('/defaults.yaml').
+ */
+function fakes(user: string | undefined, defaults: string, repo: Catalog, tool: Catalog) {
+  const entries: Record<string, string> = {'/defaults.yaml': defaults}
+  if (user !== undefined) entries['/user.yaml'] = user
+  for (const [name, body] of Object.entries(repo)) entries[`/repo/${name}.yaml`] = body
+  for (const [name, body] of Object.entries(tool)) entries[`/tool/${name}.yaml`] = body
+
+  const listing: Record<string, string[]> = {
+    '/repo': Object.keys(repo).map((name) => `${name}.yaml`),
+    '/tool': Object.keys(tool).map((name) => `${name}.yaml`),
+  }
+
+  const enoent = () => Object.assign(new Error('missing'), {code: 'ENOENT'})
+
+  return {
+    readFile: async (path: string) => {
+      if (path in entries) return entries[path]
+      throw enoent()
+    },
+    // An empty catalog is a directory that does not exist: git cannot store an empty one.
+    readDir: async (dir: string) => {
+      const names = listing[dir]
+      if (!names?.length) throw enoent()
+      return names
+    },
   }
 }
 
-const load = (user?: string, defaults?: string) => loadConfig(files(user, defaults), '/user.yaml', '/defaults.yaml')
+const load = (user?: string, defaults = DEFAULTS, catalog: {repo?: Catalog; tool?: Catalog} = {}) => {
+  const {readFile, readDir} = fakes(user, defaults, catalog.repo ?? {}, catalog.tool ?? {})
+  return loadConfig(readFile, '/user.yaml', '/defaults.yaml', readDir)
+}
 
 async function errorOf(promise: Promise<unknown>) {
   const error = await promise.then(() => undefined, (e: unknown) => e)
@@ -84,8 +112,11 @@ describe('loadConfig', () => {
   })
 
   it('merges tool recipes by name, letting the user replace one', async () => {
-    const defaults = 'package:\n  system: [zsh]\ntool:\n  chrome:\n    package: apt:google-chrome-stable\n'
-    const config = await load('tool:\n  chrome:\n    package: apt:chromium\n  code:\n    package: apt:code\n', defaults)
+    const config = await load(
+      'tool:\n  chrome:\n    package: apt:chromium\n  code:\n    package: apt:code\n',
+      DEFAULTS,
+      {tool: {chrome: 'package: apt:google-chrome-stable\n'}},
+    )
     expect(config.tool.chrome.package).toBe('apt:chromium')
     expect(config.tool.code.package).toBe('apt:code')
   })
@@ -123,8 +154,11 @@ describe('loadConfig', () => {
   })
 
   it('lets a user recipe replace the built-in setup wholesale', async () => {
-    const defaults = 'package:\n  system: [zsh]\ntool:\n  ab:\n    package: mise:ab\n    setup:\n      - name: built-in\n        check: [ab, doctor]\n        run: [ab, install]\n'
-    const config = await load('tool:\n  ab:\n    package: mise:ab\n    setup:\n      - name: mine\n        check: [ab, ok]\n        run: [ab, go]\n', defaults)
+    const config = await load(
+      'tool:\n  ab:\n    package: mise:ab\n    setup:\n      - name: mine\n        check: [ab, ok]\n        run: [ab, go]\n',
+      DEFAULTS,
+      {tool: {ab: 'package: mise:ab\nsetup:\n  - name: built-in\n    check: [ab, doctor]\n    run: [ab, install]\n'}},
+    )
     expect(config.tool.ab.setup?.map((s) => s.name)).toEqual(['mine'])
   })
 
@@ -159,6 +193,17 @@ describe('loadConfig', () => {
     const config = await load('tool:\n  ab:\n    package: apt:ab\n    prepare:\n      deb: https://x/a.deb\n      sha256: abc\n')
     expect(config.tool.ab.prepare).toMatchObject({deb: 'https://x/a.deb', sha256: 'abc'})
   })
+
+  it('assembles repo and tool from the catalog directories, not from defaults.yaml', async () => {
+    const config = await load(undefined, DEFAULTS, {
+      repo: {mozilla: 'uri: https://packages.mozilla.org/apt\nsuite: mozilla\ncomponents: [main]\nkeyring: https://packages.mozilla.org/apt/k.gpg\n'},
+      tool: {firefox: 'package: apt:firefox\nrepo: mozilla\n', 'agent-browser': 'package: mise:agent-browser\n'},
+    })
+
+    expect(Object.keys(config.tool)).toEqual(['agent-browser', 'firefox'])
+    expect(config.tool.firefox.package).toBe('apt:firefox')
+    expect(config.repo.mozilla.suite).toBe('mozilla')
+  })
 })
 
 describe('shipped defaults', () => {
@@ -183,24 +228,25 @@ describe('shipped defaults', () => {
 
 describe('repo config', () => {
   const MOZILLA = [
-    'repo:',
-    '  mozilla:',
-    '    uri: https://packages.mozilla.org/apt',
-    '    suite: mozilla',
-    '    components: [main]',
-    '    keyring: https://packages.mozilla.org/apt/repo-signing-key.gpg',
-    '    pin:',
-    '      origin: packages.mozilla.org',
-    '      priority: 1000',
+    'uri: https://packages.mozilla.org/apt',
+    'suite: mozilla',
+    'components: [main]',
+    'keyring: https://packages.mozilla.org/apt/repo-signing-key.gpg',
+    'pin:',
+    '  origin: packages.mozilla.org',
+    '  priority: 1000',
     '',
   ].join('\n')
+
+  /** The built-in catalog for these tests: one repo, named by its filename. */
+  const mozilla = (body = MOZILLA) => ({repo: {mozilla: body}})
 
   it('defaults to no repos', async () => {
     expect((await load()).repo).toEqual({})
   })
 
   it('parses a repo with a pin', async () => {
-    const config = await load(undefined, DEFAULTS + MOZILLA)
+    const config = await load(undefined, DEFAULTS, mozilla())
     expect(config.repo.mozilla).toEqual({
       uri: 'https://packages.mozilla.org/apt',
       suite: 'mozilla',
@@ -210,30 +256,34 @@ describe('repo config', () => {
     })
   })
 
-  it('rejects a misspelled key inside a repo, naming it', async () => {
-    const error = await errorOf(load(undefined, DEFAULTS + MOZILLA.replace('    suite:', '    suit:')))
+  it('rejects a misspelled key inside a repo, naming the file and the key', async () => {
+    const error = await errorOf(load(undefined, DEFAULTS, mozilla(MOZILLA.replace('suite:', 'suit:'))))
     expect(error.code).toBe('CONFIG_INVALID')
+    expect(error.message).toContain('/repo/mozilla.yaml')
     expect(error.message).toContain('suit')
   })
 
-  it('rejects a repo name that would not be a usable filename', async () => {
-    const error = await errorOf(load(undefined, DEFAULTS + MOZILLA.replace('  mozilla:', '  Mozilla/1:')))
+  it('rejects a non-https uri and keyring, naming the field', async () => {
+    const uri = await errorOf(load(undefined, DEFAULTS, mozilla(MOZILLA.replace('uri: https://', 'uri: http://'))))
+    expect(uri.message).toContain('uri')
+
+    const keyring = await errorOf(load(undefined, DEFAULTS, mozilla(MOZILLA.replace('keyring: https://', 'keyring: http://'))))
+    expect(keyring.message).toContain('keyring')
+  })
+
+  it('rejects a user repo name that would not be a usable filename', async () => {
+    // A built-in repo's name is its filename, guarded by readCatalog; a user's is a map key.
+    const user = 'repo:\n  Mozilla/1:\n    uri: https://x.test/apt\n    suite: m\n    components: [main]\n    keyring: https://x.test/k.gpg\n'
+    const error = await errorOf(load(user))
     expect(error.code).toBe('CONFIG_INVALID')
     expect(error.message).toContain('Mozilla/1')
   })
 
-  it('rejects a non-https uri and keyring, naming the field', async () => {
-    const uri = await errorOf(load(undefined, DEFAULTS + MOZILLA.replace('uri: https://', 'uri: http://')))
-    expect(uri.message).toContain('uri')
-
-    const keyring = await errorOf(load(undefined, DEFAULTS + MOZILLA.replace('keyring: https://', 'keyring: http://')))
-    expect(keyring.message).toContain('keyring')
-  })
-
   it('merges repos by name, with the user winning and other repos kept', async () => {
-    const other = '  other:\n    uri: https://other.test/apt\n    suite: o\n    components: [main]\n    keyring: https://other.test/k.gpg\n'
+    const other = 'uri: https://other.test/apt\nsuite: o\ncomponents: [main]\nkeyring: https://other.test/k.gpg\n'
     const user = 'repo:\n  mozilla:\n    uri: https://mirror.test/apt\n    suite: m\n    components: [main]\n    keyring: https://mirror.test/k.gpg\n'
-    const config = await load(user, DEFAULTS + MOZILLA + other)
+    const config = await load(user, DEFAULTS, {repo: {mozilla: MOZILLA, other}})
+
     expect(config.repo.mozilla.uri).toBe('https://mirror.test/apt')
     expect(config.repo.mozilla.pin).toBeUndefined()
     // A user `repo` section must not drop the built-in repos it does not mention.
@@ -241,10 +291,10 @@ describe('repo config', () => {
   })
 
   it('rejects a pin priority that is not a positive integer', async () => {
-    const zero = await errorOf(load(undefined, DEFAULTS + MOZILLA.replace('priority: 1000', 'priority: 0')))
+    const zero = await errorOf(load(undefined, DEFAULTS, mozilla(MOZILLA.replace('priority: 1000', 'priority: 0'))))
     expect(zero.code).toBe('CONFIG_INVALID')
 
-    const text = await errorOf(load(undefined, DEFAULTS + MOZILLA.replace('priority: 1000', 'priority: high')))
+    const text = await errorOf(load(undefined, DEFAULTS, mozilla(MOZILLA.replace('priority: 1000', 'priority: high'))))
     expect(text.code).toBe('CONFIG_INVALID')
   })
 })

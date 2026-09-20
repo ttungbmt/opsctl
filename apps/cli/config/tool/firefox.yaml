@@ -1,0 +1,5 @@
+summary: Mozilla Firefox
+# Mozilla publishes no standalone .deb, so there is nothing to `prepare`; the repo is what
+# makes `apt:firefox` mean Mozilla's build rather than Ubuntu's snap shim.
+package: apt:firefox
+repo: mozilla

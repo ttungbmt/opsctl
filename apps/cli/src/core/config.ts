@@ -1,6 +1,6 @@
-import {readFile as fsReadFile} from 'node:fs/promises'
+import {readFile as fsReadFile, readdir as fsReaddir} from 'node:fs/promises'
 import {homedir} from 'node:os'
-import {join} from 'node:path'
+import {dirname, join} from 'node:path'
 import {fileURLToPath} from 'node:url'
 
 import {parse} from 'yaml'
@@ -171,26 +171,22 @@ const MiseSchema = z.strictObject({
 export type MiseConfig = z.infer<typeof MiseSchema>
 
 /**
- * Unknown keys are kept so other areas can add their own sections. Sections are declared
- * in the order config/defaults.yaml lists them -- dependency order, each one referring
- * only to something above it -- so the schema and the file read the same way.
+ * What defaults.yaml itself holds: settings, not catalog entries. Still loose, so another
+ * area can add its own section without touching this schema. `repo` and `tool` come from
+ * config/repo/ and config/tool/ instead.
  */
-const DefaultsSchema = z.looseObject({
+const DefaultsFileSchema = z.looseObject({
   /** Where ops gets mise when a machine has none; the preflight reads it. */
   mise: MiseSchema.optional(),
   package: z.looseObject({
     /** Plain names installed with apt/dnf instead of a mise tool. */
     system: NameList,
   }),
-  /** Third-party apt repositories, referenced by name from a recipe's `repo`. */
-  repo: z.record(EntryName, RepoSchema).default({}),
-  /** Named recipes: a plain name resolves to recipe.package before any heuristic. */
-  tool: z.record(z.string(), RecipeSchema).default({}),
   /** Named machine profiles; `ops bootstrap <name>` converges the machine to one. */
   profile: z.record(ProfileName, ProfileSchema).default({}),
 })
 
-/** Same section order as DefaultsSchema. */
+/** Same section order as DefaultsFileSchema. */
 const UserSchema = z.looseObject({
   /**
    * Replaced wholesale, unlike repo/tool/profile: both fields belong together, so the plain
@@ -211,7 +207,11 @@ const UserSchema = z.looseObject({
   profile: z.record(ProfileName, ProfileSchema).optional(),
 })
 
-export type Config = z.infer<typeof DefaultsSchema>
+/** The assembled config: the file's settings plus the two catalogs. Unchanged for consumers. */
+export type Config = z.infer<typeof DefaultsFileSchema> & {
+  repo: Record<string, z.infer<typeof RepoSchema>>
+  tool: Record<string, z.infer<typeof RecipeSchema>>
+}
 export type UserConfig = z.infer<typeof UserSchema>
 
 /** config/defaults.yaml shipped with the CLI; the same relative path from src/core and dist/core. */
@@ -244,8 +244,16 @@ export async function loadConfig(
   readFile: ReadFile = (path) => fsReadFile(path, 'utf8'),
   path: string = configPath(),
   defaults: string = defaultsPath(),
+  readDir: ReadDir = (dir) => fsReaddir(dir),
 ): Promise<Config> {
-  const base = await readYaml(readFile, defaults, DefaultsSchema)
+  // The catalogs sit beside defaults.yaml, so they need no path of their own.
+  const dir = dirname(defaults)
+  const base: Config = {
+    ...(await readYaml(readFile, defaults, DefaultsFileSchema)),
+    repo: await readCatalog(readFile, readDir, join(dir, 'repo'), RepoSchema),
+    tool: await readCatalog(readFile, readDir, join(dir, 'tool'), RecipeSchema),
+  }
+
   let user: UserConfig
   try {
     user = await readYaml(readFile, path, UserSchema)

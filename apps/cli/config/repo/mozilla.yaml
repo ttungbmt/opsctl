@@ -1,0 +1,11 @@
+uri: https://packages.mozilla.org/apt
+suite: mozilla
+components: [main]
+keyring: https://packages.mozilla.org/apt/repo-signing-key.gpg
+# This repo publishes an internal path as its Release `Origin:`, so the pin matches the
+# site hostname instead. Do not "correct" this to `release o=` -- that breaks the pin.
+# 1000 beats the Ubuntu archive's 500, whose `firefox` is a 121 KB transitional package
+# that installs the Firefox snap.
+pin:
+  origin: packages.mozilla.org
+  priority: 1000

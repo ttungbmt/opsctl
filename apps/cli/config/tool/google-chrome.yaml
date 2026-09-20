@@ -1,0 +1,23 @@
+summary: Google Chrome
+package: apt:google-chrome-stable
+prepare:
+  # Google's own .deb; its postinst configures the apt repo for later updates.
+  deb: https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+uninstall:
+  # `--purge` only, and only what dpkg does not own. Verified with `dpkg -S`
+  # against a real install: /opt/google/chrome and the
+  # /etc/cron.daily/google-chrome symlink belong to the package and go with
+  # `apt-get purge`, while the two repo files below belong to nobody --
+  # Chrome's postinst writes them ("This file will not be recreated if
+  # removed") and they would re-add the repo on the next `apt update`.
+  # `.sources` is the deb822 name current Chrome writes and `.list` the
+  # older one; the keyring moved between releases. A path that does not
+  # exist is a no-op, so every known variant is listed.
+  purge:
+    paths:
+      - /etc/apt/sources.list.d/google-chrome.sources
+      - /etc/apt/sources.list.d/google-chrome.list
+      - /usr/share/keyrings/google-chrome.gpg
+      - /etc/apt/keyrings/google-chrome.gpg
+      - ~/.config/google-chrome
+      - ~/.cache/google-chrome

@@ -1,0 +1,12 @@
+summary: Browser automation CLI for AI agents
+# Already in the mise registry (aqua:vercel-labs/agent-browser); the recipe
+# exists to carry `setup`, and pins resolution so no registry lookup runs.
+package: mise:agent-browser
+setup:
+  # The binary alone cannot drive anything: `install` downloads Chrome for
+  # Testing and, with --with-deps, the system libraries it needs. `doctor`
+  # exits 1 when any check fails; --quick skips its live headless launch and
+  # --offline skips network probes, keeping the probe fast and local.
+  - name: browser binaries
+    check: [agent-browser, doctor, --quick, --offline]
+    run: [agent-browser, install, --with-deps]
