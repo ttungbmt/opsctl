@@ -241,13 +241,14 @@ CLI flags
 
 > Today only two of these layers exist: the built-in `config/defaults.yaml` is
 > overlaid by `~/.config/ops/config.yaml` (relocatable with `$OPS_CONFIG`).
-> Profiles, project-local config and per-key environment overrides are planned.
+> The profile *layer*, project-local config and per-key environment overrides are
+> planned. Note that this layer is a different concept from the `profile.<name>`
+> map that `ops bootstrap` reads: that one describes a machine, this one would
+> describe which settings win.
 
 Example:
 
 ```yaml
-profile: developer
-
 defaults:
   editor: nvim
 
@@ -353,7 +354,7 @@ ops tool install
 
 ops service restart
 
-ops profile apply
+ops profile show
 
 ops workflow run
 ```
@@ -475,8 +476,6 @@ opsctl/
 │   ├── youtube/
 │   ├── cloud/
 │   └── ai/
-│
-├── profiles/
 │
 ├── docs/
 │

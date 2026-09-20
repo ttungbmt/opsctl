@@ -7,7 +7,7 @@
 Instead of remembering dozens of commands, flags, configuration files, and setup steps, Ops CLI provides a consistent interface:
 
 ```bash
-ops bootstrap
+ops bootstrap dev
 ops doctor
 
 ops tool install docker
@@ -20,10 +20,13 @@ ops docker cleanup
 ops workflow run backup
 ```
 
-> **Status:** early scaffolding. What works today is `ops --version` and the `ops tool` group —
+> **Status:** early. What works today is `ops --version`, the `ops tool` group —
 > [`install`](docs/commands.md#how-a-tool-gets-installed), [`setup`](docs/commands.md#how-setup-works) and
-> [`uninstall`](docs/commands.md#removing-a-tool). Everything else above and below describes the planned
-> design. See the [roadmap](docs/roadmap.md).
+> [`uninstall`](docs/commands.md#removing-a-tool) — plus [`ops bootstrap`](docs/commands.md#bootstrap) and
+> [`ops profile list|show`](docs/commands.md#profiles), which converge a machine to a named profile.
+> Bootstrap's `services`, `shell` and `dotfiles` sections are defined in the profile schema but not yet
+> implemented. Everything else above and below describes the planned design. See the
+> [roadmap](docs/roadmap.md).
 
 ## Installation
 

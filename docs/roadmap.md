@@ -2,11 +2,14 @@
 
 > Part of the [Ops CLI](../README.md) docs.
 
-> **Where we are:** partway into v0.2. Shipped so far: `ops tool install`,
-> `ops tool setup`, `ops tool uninstall`, the config layer, the process executor,
-> and the package/tool abstractions behind them — including tool recipes, vendor
-> apt repositories and `--purge`. Not yet built from v0.1: `ops version`,
-> `ops doctor`, `ops config get|set`.
+> **Where we are:** v0.2 is essentially done. Shipped so far: `ops tool
+> install|setup|uninstall`, `ops bootstrap`, `ops profile list|show`, the config
+> layer, the process executor, and the package/tool abstractions behind them —
+> including tool recipes, vendor apt repositories, `--purge`, machine profiles
+> with `extends`, and the section-based bootstrap engine. Bootstrap's
+> `services`, `shell` and `dotfiles` sections are defined in the profile schema
+> but not yet implemented. Not yet built from v0.1: `ops version`, `ops doctor`,
+> `ops config get|set`.
 
 ## Development Roadmap
 
@@ -57,7 +60,9 @@ profiles
 Target:
 
 ```bash
-ops bootstrap developer
+ops bootstrap dev
+
+ops profile list
 
 ops tool install
 

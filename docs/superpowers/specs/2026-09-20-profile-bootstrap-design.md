@@ -1,6 +1,6 @@
 # `ops bootstrap` and profiles — Design
 
-Date: 2026-09-20 · Status: planned
+Date: 2026-09-20 · Status: phase 1 implemented
 
 Builds on [`2026-09-20-tool-command-surface-design.md`](2026-09-20-tool-command-surface-design.md),
 [`2026-09-20-tool-recipes-design.md`](2026-09-20-tool-recipes-design.md) and

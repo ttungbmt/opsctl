@@ -567,7 +567,7 @@ Profiles định nghĩa desired environment.
 ```bash
 ops profile list
 ops profile show
-ops profile apply developer
+ops bootstrap dev
 ```
 
 Ví dụ:

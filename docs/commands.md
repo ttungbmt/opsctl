@@ -86,47 +86,73 @@ ops tool install docker \
 
 ## Bootstrap
 
-Bootstrap a machine using an environment profile.
+Converge a machine to a named profile. This is the verb that applies a profile;
+`ops profile` only inspects.
 
 ```bash
-ops bootstrap
-
-ops bootstrap minimal
-ops bootstrap developer
-ops bootstrap workstation
-ops bootstrap server
+ops bootstrap              # no name runs "minimal"
+ops bootstrap dev
+ops bootstrap dev --dry-run
+ops bootstrap dev --yes
+ops bootstrap dev --only tools --yes
+ops bootstrap dev --json --non-interactive
 ```
 
-Planned bootstrap flow:
+| Flag | Meaning |
+|---|---|
+| `--dry-run` | Inspect every section, print the plan, change nothing |
+| `-y, --yes` | Skip the confirmation gate |
+| `--non-interactive` | Never prompt (implies `--yes`) |
+| `--force` | Switch a package installed from the wrong origin |
+| `--only <section>` | Run only these sections (repeatable; exclusive with `--skip`) |
+| `--skip <section>` | Skip these sections (repeatable) |
+| `--json` | Machine-readable result on stdout |
+
+Exit codes: `0` every section succeeded, or a dry run whose plan computed
+cleanly; `1` a section failed, or an `OpsError`; `2` a usage error.
+
+### How a run is shaped
 
 ```text
-Detect
+resolve the profile (extends, validated at config load)
 ↓
-Inspect
+plan every declared section       ← read-only: nothing is written yet
 ↓
-Plan
+--dry-run? print the plan and stop
 ↓
-Install
+one confirmation for the whole run
 ↓
-Configure
+apply each section in order, verifying as it goes
 ↓
-Verify
-↓
-Report
+report
 ```
 
-Example profiles:
+Sections always run in this order, because later ones depend on earlier ones:
 
 ```text
-minimal
-personal
-developer
-work
-server
-cloud
-ai
-full
+packages → tools → setup → services → shell → dotfiles
 ```
+
+Two properties worth knowing:
+
+- **One confirmation, not one per section.** Every section is inspected before
+  any of them writes, so a single plan covers the whole run. On a TTY the plan
+  is printed and the run proceeds; under `--json` or without a TTY, pending
+  changes require `--yes`.
+- **A failed section stops the run.** The sections after it are reported
+  `skipped` rather than attempted, and the exit code is `1`. A dry run does not
+  stop early — it plans everything so you see the whole picture.
+
+A section a profile declares but this build cannot run is an error
+(`PROFILE_SECTION_UNSUPPORTED`), never a silent skip: skipping would leave the
+machine unconverged while still reporting success. `--skip <section>` is the
+explicit way out. `services`, `shell` and `dotfiles` are defined in the schema
+but land in later phases.
+
+> The plan is advisory for system packages. `mise bootstrap packages status`
+> only reports packages ops has declared, so one that is installed but was never
+> declared shows as pending and comes back already satisfied once the run
+> declares it. The apply-phase inspection is the authoritative one.
 
 ---
 
@@ -692,37 +718,61 @@ Instead, it wraps frequently used workflows behind simpler commands.
 
 ## Profiles
 
-Profiles describe a desired environment.
+A profile names what a machine should have. Profiles are config data,
+`profile.<name>` in `config/defaults.yaml`, extended or replaced in
+`~/.config/ops/config.yaml` (or `$OPS_CONFIG`).
 
 ```bash
 ops profile list
 
-ops profile show developer
-
-ops profile apply developer
+ops profile show dev          # composed through extends, with its lineage
+ops profile show dev --raw    # the literal config entry, which is what you edit
 ```
 
-Example concept:
+`ops profile` is read-only. **`ops bootstrap <name>` is what applies a profile** —
+one operation, one name.
+
+### Shape
 
 ```yaml
-developer:
-  tools:
-    - git
-    - node
-    - docker
-    - terraform
+profile:
+  base:
+    summary: What ops itself needs on any machine
+    packages: [ca-certificates, curl, git, unzip]
 
-  setup:
-    - git
-    - ssh
-    - mise
+  minimal:
+    summary: A machine you can work on over ssh
+    extends: base                  # a name, or a list of names
+    packages: [build-essential, openssh-client, tmux, wget]
+
+  dev:
+    summary: Local development box
+    extends: minimal
+    packages: [zsh]                # resolved the way `ops tool install` does
+    tools: [node, pnpm]            # ignores package.system, so a bare name
+                                   # prefers the mise registry; may carry @version
+    setup: [git]                   # tool names that have tool.<name>.setup
 ```
 
-Profiles can eventually power:
+Three profiles ship: `base`, `minimal` and `dev`.
 
-```bash
-ops bootstrap developer
-```
+### How `extends` composes
+
+- **List sections concatenate**, base first, then the child, deduplicated keeping
+  the first occurrence's position. A bare list *adds* to what `extends` brought
+  in — a profile states what it contributes, not what its base already had.
+- **`{add: [...], remove: [...]}`** adjusts an inherited list instead of adding
+  to it. `remove` applies to the inherited names, then `add` appends.
+- **Several parents** resolve left to right; the child always wins last. A shared
+  base in a diamond contributes once.
+- **`summary` is not inherited.** It describes that profile.
+- A **cycle**, a **dangling `extends`**, or a **`setup:` entry naming a tool with
+  no steps** all fail at config load with `CONFIG_INVALID` — never halfway
+  through a privileged run. Names in `packages:` and `tools:` are not validated;
+  they resolve at run time.
+
+A user profile of the same name **replaces** the built-in wholesale. To build on
+one, `extends` it rather than retyping it.
 
 ---
 

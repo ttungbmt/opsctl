@@ -685,9 +685,9 @@ detect
 ```bash
 ops profile list
 
-ops profile show developer
+ops profile show dev
 
-ops profile apply developer
+ops bootstrap dev
 ```
 
 Example:
@@ -1156,7 +1156,6 @@ ops/
 │   ├── youtube/
 │   └── ai/
 │
-├── profiles/
 ├── docs/
 └── tests/
 ```
@@ -1176,7 +1175,7 @@ Prefer:
 ```bash
 ops tool install
 ops service restart
-ops profile apply
+ops profile show
 ```
 
 Avoid inconsistent patterns:
