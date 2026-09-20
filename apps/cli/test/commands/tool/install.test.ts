@@ -49,3 +49,10 @@ describe('ToolInstall.catch', () => {
     expect(ux.action.running).toBe(false)
   })
 })
+
+describe('ToolInstall preflight flag', () => {
+  it('runs the preflight by default and can be turned off', () => {
+    expect(ToolInstall.flags.preflight.allowNo).toBe(true)
+    expect(ToolInstall.flags.preflight.default).toBe(true)
+  })
+})

@@ -2,14 +2,23 @@ import {Args, Command, Flags, ux} from '@oclif/core'
 
 import {loadConfig} from '../../core/config.js'
 import {OpsError} from '../../core/errors.js'
-import {downloadProgress, renderInstallResult, stageReporter} from '../../core/output.js'
+import {
+  downloadProgress,
+  renderInstallResult,
+  renderPreflight,
+  renderPreflightPlan,
+  stageReporter,
+} from '../../core/output.js'
 import {styleFor} from '../../core/style.js'
-import {type InstallResult, installPackages} from '../../core/package/install.js'
+import {type InstallOptions, type InstallResult, haltedBeforeInstall, installPackages} from '../../core/package/install.js'
+import {type PreflightResult, ensureMise} from '../../core/preflight.js'
 import {recipeIndex} from '../../core/tool/recipe.js'
 import {execaRunner, sudoReady} from '../../executor/exec.js'
 import {createAptRepoProvider} from '../../providers/apt-repo.js'
 import {createDebInstaller} from '../../providers/deb.js'
 import {createMiseBootstrap} from '../../providers/mise-bootstrap.js'
+import {createMiseInstaller} from '../../providers/mise-install.js'
+import {probeMise} from '../../providers/mise-presence.js'
 import {createMiseTools} from '../../providers/mise-tools.js'
 import {detectSystemManager} from '../../providers/os.js'
 
@@ -38,6 +47,11 @@ export default class ToolInstall extends Command {
       summary: "Reinstall through a recipe's repo when a build from somewhere else is installed",
     }),
     'non-interactive': Flags.boolean({default: false, summary: 'Never prompt (implies --yes); fail if sudo needs a password'}),
+    preflight: Flags.boolean({
+      allowNo: true,
+      default: true,
+      summary: 'Install mise first when it is missing (--no-preflight to skip)',
+    }),
     yes: Flags.boolean({char: 'y', default: false, summary: 'Skip the confirmation prompt'}),
   }
 
@@ -60,15 +74,57 @@ export default class ToolInstall extends Command {
     const mayInstall = !flags['dry-run'] && !this.jsonEnabled() && process.stderr.isTTY
     const spin = mayInstall && (await sudoReady(execaRunner))
 
+    const options: InstallOptions = {
+      dryRun: flags['dry-run'],
+      force: flags.force,
+      json: this.jsonEnabled(),
+      nonInteractive: flags['non-interactive'],
+      packages: argv as string[],
+      yes: flags.yes,
+    }
+
+    const stopSpinner = () => {
+      if (ux.action.running) ux.action.stop()
+    }
+
+    // Named, because the preflight drives the same spinner the install does.
+    const onStage =
+      spin || onProgress
+        ? stageReporter(
+            (text) => process.stderr.write(text),
+            Boolean(onProgress),
+            spin ? (label) => ux.action.start(label) : undefined,
+            spin ? stopSpinner : undefined,
+          )
+        : undefined
+
+    let preflight: PreflightResult | undefined
+    if (flags.preflight) {
+      preflight = await ensureMise(options, {
+        captureOutput: spin,
+        installer: config.mise && createMiseInstaller(execaRunner, config.mise),
+        isTTY: Boolean(process.stdout.isTTY),
+        onPlan: (changes) => {
+          if (!this.jsonEnabled()) for (const line of renderPreflightPlan(changes, styleFor(false))) this.log(line)
+        },
+        onProgress,
+        onStage,
+        probe: () => probeMise(execaRunner),
+        sudoReady: () => sudoReady(execaRunner),
+      })
+
+      stopSpinner()
+      if (!this.jsonEnabled()) for (const line of renderPreflight(preflight, styleFor(false))) this.log(line)
+
+      // Nothing can be resolved without mise: resolveSpecs asks the mise registry.
+      if (!preflight.satisfied) {
+        process.exitCode = 1
+        return haltedBeforeInstall(options, preflight)
+      }
+    }
+
     const result = await installPackages(
-      {
-        dryRun: flags['dry-run'],
-        force: flags.force,
-        json: this.jsonEnabled(),
-        nonInteractive: flags['non-interactive'],
-        packages: argv as string[],
-        yes: flags.yes,
-      },
+      options,
       {
         deb: createDebInstaller(execaRunner),
         detectManager: () => detectSystemManager(),
@@ -77,19 +133,7 @@ export default class ToolInstall extends Command {
         captureOutput: spin,
         mise: createMiseBootstrap(execaRunner),
         onProgress,
-        onStage:
-          spin || onProgress
-            ? stageReporter(
-                (text) => process.stderr.write(text),
-                Boolean(onProgress),
-                spin ? (label) => ux.action.start(label) : undefined,
-                spin
-                  ? () => {
-                      if (ux.action.running) ux.action.stop()
-                    }
-                  : undefined,
-              )
-            : undefined,
+        onStage,
         recipes: recipeIndex(config.tool, {repos: config.repo}),
         sudoReady: () => sudoReady(execaRunner),
         systemPreferred: new Set(config.package.system),
@@ -97,7 +141,8 @@ export default class ToolInstall extends Command {
       },
     )
 
-    if (ux.action.running) ux.action.stop()
+    stopSpinner()
+    if (preflight) result.preflight = preflight
     if (!this.jsonEnabled()) for (const line of renderInstallResult(result, styleFor(this.jsonEnabled()))) this.log(line)
     if (!result.success) process.exitCode = 1
     return result
