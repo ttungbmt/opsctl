@@ -157,7 +157,7 @@ export function createMiseDeclarations(
       return result.exitCode === 0
     } catch (error) {
       if (error instanceof CommandNotFoundError) {
-        throw new OpsError('MISE_BOOTSTRAP_UNAVAILABLE', 'mise not found on PATH; install it from https://mise.jdx.dev')
+        throw new OpsError('MISE_BOOTSTRAP_UNAVAILABLE', 'mise not found on PATH; run `ops bootstrap` to install it, or install it from https://mise.jdx.dev')
       }
 
       throw error

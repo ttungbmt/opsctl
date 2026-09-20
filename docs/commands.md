@@ -107,6 +107,7 @@ ops bootstrap dev --json --non-interactive
 | `--only <section>` | Run only these sections (repeatable; exclusive with `--skip`) |
 | `--skip <section>` | Skip these sections (repeatable) |
 | `--json` | Machine-readable result on stdout |
+| `--no-preflight` | Do not install mise when it is missing; fail instead |
 
 Exit codes: `0` every section succeeded, or a dry run whose plan computed
 cleanly; `1` a section failed, or an `OpsError`; `2` a usage error.
@@ -142,6 +143,26 @@ Two properties worth knowing:
 - **A failed section stops the run.** The sections after it are reported
   `skipped` rather than attempted, and the exit code is `1`. A dry run does not
   stop early — it plans everything so you see the whole picture.
+
+### The mise preflight
+
+ops runs on mise, so every section's plan is a mise call. On a machine that has
+none, `ops bootstrap` and `ops tool install` install it first: they download
+mise's official installer over https and run it as a file — never piped into a
+shell, which would let a truncated download half-execute — placing mise in
+`/usr/local/bin` so every shell finds it.
+
+This has its own confirmation gate, separate from the profile's: you cannot
+consent to a plan that cannot be computed yet. On a machine that already has
+mise the preflight is one `mise --version` and prints nothing. A mise that is
+present but misbehaving is left alone — that is a different repair.
+
+`--dry-run` on a machine without mise reports what the preflight would do and
+stops with exit 1: the section plans genuinely cannot be computed, and printing
+a partial picture beside exit 0 would say otherwise. `--no-preflight` turns the
+whole thing off and restores the plain `MISE_BOOTSTRAP_UNAVAILABLE` failure.
+
+Where mise comes from is config, under `mise:` in `config/defaults.yaml`.
 
 A section a profile declares but this build cannot run is an error
 (`PROFILE_SECTION_UNSUPPORTED`), never a silent skip: skipping would leave the

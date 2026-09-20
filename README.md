@@ -30,7 +30,7 @@ ops workflow run backup
 
 ## Installation
 
-Releases are self-contained tarballs (Node.js bundled) published to GitHub Releases. On a fresh machine only [mise](https://mise.jdx.dev) is required:
+Releases are self-contained tarballs (Node.js bundled) published to GitHub Releases. The usual way is through [mise](https://mise.jdx.dev):
 
 ```bash
 curl https://mise.run | sh
@@ -40,6 +40,22 @@ ops --version
 ```
 
 If mise's `minimum_release_age` hides a fresh release, pin it explicitly: `mise use -g github:ttungbmt/opsctl@0.1.0`.
+
+Or take ops on its own. The tarball bundles Node, so it runs the moment it is
+extracted, and `ops bootstrap` installs mise for you on first run — ops is then the
+only thing you download. The asset name carries the release's commit, so resolve it
+rather than guessing:
+
+```bash
+url=$(curl -fsSL https://api.github.com/repos/ttungbmt/opsctl/releases/latest \
+  | grep -o 'https://[^"]*linux-x64\.tar\.gz')
+curl -fsSL "$url" | tar xz
+
+./ops/bin/ops bootstrap --yes
+```
+
+`ops bootstrap` and `ops tool install` check for mise first and install it when it is
+missing, into `/usr/local/bin`. Pass `--no-preflight` to turn that off.
 
 Update:
 

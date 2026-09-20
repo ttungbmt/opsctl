@@ -59,7 +59,7 @@ export function createMiseTools(runner: Runner): MiseTools {
       return await runner.run('mise', [...NEUTRAL_CWD, ...args], opts)
     } catch (error) {
       if (error instanceof CommandNotFoundError) {
-        throw new OpsError('MISE_BOOTSTRAP_UNAVAILABLE', 'mise not found on PATH; install it from https://mise.jdx.dev')
+        throw new OpsError('MISE_BOOTSTRAP_UNAVAILABLE', 'mise not found on PATH; run `ops bootstrap` to install it, or install it from https://mise.jdx.dev')
       }
 
       throw error

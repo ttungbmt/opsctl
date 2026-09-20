@@ -425,10 +425,9 @@ inspect→apply→verify. That is the price of one confirmation for the whole ru
 Inspection is `mise ls --json` and a few check commands, cheap next to apt, and
 the second pass is exactly what makes apply's verify honest.
 
-**`--dry-run` needs mise.** The plan shells out to `mise ... --dry-run`, so a
-machine without mise gets `MISE_BOOTSTRAP_UNAVAILABLE` at plan time. mise is the
-CLI's own prerequisite, so this is acceptable as long as the user sees that
-message rather than a stack trace — which the `catch()` override guarantees.
+**`--dry-run` needs mise.** Superseded by
+[`2026-09-20-mise-preflight-design.md`](2026-09-20-mise-preflight-design.md),
+which installs mise first when a machine has none.
 
 **The container has no running systemd** (PID 1 is a shell). When phase 2
 starts, the `services` section can only be exercised along its `--dry-run` and
