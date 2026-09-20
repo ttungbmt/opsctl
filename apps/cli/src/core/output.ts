@@ -1,5 +1,6 @@
 import type {OnProgress} from '../providers/deb.js'
 import {type Style, plainStyle} from './style.js'
+import {type Stage, stageLabel} from './stage.js'
 import type {InstallResult, PackageStatus} from './package/install.js'
 import type {SetupResult, SetupStatus, SetupStepResult} from './tool/setup.js'
 import type {PurgeStatus, UninstallPlan, UninstallResult, UninstallStatus} from './package/uninstall.js'
@@ -200,5 +201,35 @@ export function downloadProgress(
     } else {
       write(`${percent}  ${finished ? size : `${(done / MIB).toFixed(1)}/${size}`}`)
     }
+  }
+}
+
+/**
+ * Drives the terminal around the .deb work: names the file before the progress line
+ * starts, then closes that line off so the spinner does not overwrite it. The progress
+ * line is written with \r and never newline-terminated, hence the handover.
+ */
+export function stageReporter(
+  write: (s: string) => void,
+  showsProgress: boolean,
+  start?: (label: string) => void,
+  stop?: () => void,
+): (stage: Stage, subject: string) => void {
+  return (stage, subject) => {
+    // apt prints its own download and install; a spinner repainting over it shreds both.
+    if (stage === 'streaming') {
+      stop?.()
+      return
+    }
+
+    if (stage === 'downloading') {
+      if (showsProgress) write(`downloading ${subject}\n`)
+      return
+    }
+
+    // Only the .deb download leaves an unterminated \r line, so only its successor
+    // has a row to hand over; repo stages must not steal a newline they never needed.
+    if (stage === 'installing' && showsProgress) write('\n')
+    start?.(stageLabel(stage, subject))
   }
 }
