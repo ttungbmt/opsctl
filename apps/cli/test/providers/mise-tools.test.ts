@@ -1,8 +1,8 @@
 import {describe, expect, it} from 'vitest'
-import {OpsError} from '../../src/core/errors.js'
-import {CommandNotFoundError} from '../../src/core/errors.js'
-import {createMiseTools} from '../../src/providers/mise-tools.js'
-import {FakeRunner} from '../helpers/fake-runner.js'
+import {OpsError} from '#core/errors.js'
+import {CommandNotFoundError} from '#core/errors.js'
+import {createMiseTools} from '#providers/mise-tools.js'
+import {FakeRunner} from '#test/helpers/fake-runner.js'
 
 // Shape observed from `mise ls -g --json` on mise 2026.9.11 (extra fields trimmed).
 const LS = JSON.stringify({

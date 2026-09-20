@@ -1,9 +1,9 @@
 import {describe, expect, it} from 'vitest'
-import {OpsError} from '../../../src/core/errors.js'
-import {type InstallDeps, type InstallOptions, installPackages} from '../../../src/core/package/install.js'
-import type {PackageSpec} from '../../../src/core/package/spec.js'
-import {recipeIndex} from '../../../src/core/tool/recipe.js'
-import {FakeDeb, FakeMise, FakeRepos, FakeTools} from '../../helpers/fake-packages.js'
+import {OpsError} from '#core/errors.js'
+import {type InstallDeps, type InstallOptions, installPackages} from '#core/package/install.js'
+import type {PackageSpec} from '#core/package/spec.js'
+import {recipeIndex} from '#core/tool/recipe.js'
+import {FakeDeb, FakeMise, FakeRepos, FakeTools} from '#test/helpers/fake-packages.js'
 
 function setup(overrides: Partial<InstallDeps> = {}) {
   const mise = new FakeMise()

@@ -1,6 +1,6 @@
 import {describe, expect, it} from 'vitest'
-import {type PathFs, createPathRemover} from '../../src/providers/paths.js'
-import {FakeRunner} from '../helpers/fake-runner.js'
+import {type PathFs, createPathRemover} from '#providers/paths.js'
+import {FakeRunner} from '#test/helpers/fake-runner.js'
 
 /** Entries are [path, {missing?, symlink?, writableParent?}]. */
 function fakeFs(entries: Record<string, {missing?: boolean; writableParent?: boolean}>) {

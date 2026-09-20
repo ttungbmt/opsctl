@@ -1,7 +1,7 @@
 import {describe, expect, it} from 'vitest'
-import {CommandNotFoundError} from '../../src/core/errors.js'
-import {execaRunner, sudoReady} from '../../src/executor/exec.js'
-import {FakeRunner} from '../helpers/fake-runner.js'
+import {CommandNotFoundError} from '#core/errors.js'
+import {execaRunner, sudoReady} from '#executor/exec.js'
+import {FakeRunner} from '#test/helpers/fake-runner.js'
 
 describe('execaRunner', () => {
   it('captures stdout, stderr and a non-zero exit code without throwing', async () => {

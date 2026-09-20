@@ -1,6 +1,6 @@
 import {describe, expect, it} from 'vitest'
-import {OpsError} from '../../../src/core/errors.js'
-import {managerOf, toPackageSpec, toolKey, withoutVersion} from '../../../src/core/package/spec.js'
+import {OpsError} from '#core/errors.js'
+import {managerOf, toPackageSpec, toolKey, withoutVersion} from '#core/package/spec.js'
 
 describe('toPackageSpec', () => {
   it('prefixes a plain name with the given manager', () => {

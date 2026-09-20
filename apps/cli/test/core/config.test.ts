@@ -1,9 +1,9 @@
 import {readFile} from 'node:fs/promises'
 
 import {describe, expect, it} from 'vitest'
-import {configPath, defaultsPath, loadConfig} from '../../src/core/config.js'
-import {OpsError} from '../../src/core/errors.js'
-import {recipeIndex} from '../../src/core/tool/recipe.js'
+import {configPath, defaultsPath, loadConfig} from '#core/config.js'
+import {OpsError} from '#core/errors.js'
+import {recipeIndex} from '#core/tool/recipe.js'
 
 const DEFAULTS = 'package:\n  system: [zsh, tmux]\n'
 

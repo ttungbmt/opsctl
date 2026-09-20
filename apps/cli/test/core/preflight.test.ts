@@ -1,9 +1,9 @@
 import {describe, expect, it, vi} from 'vitest'
-import {OpsError} from '../../src/core/errors.js'
-import {type PreflightDeps, type PreflightOptions, ensureMise} from '../../src/core/preflight.js'
-import type {Stage} from '../../src/core/stage.js'
-import type {MiseInstaller} from '../../src/providers/mise-install.js'
-import type {MiseState} from '../../src/providers/mise-presence.js'
+import {OpsError} from '#core/errors.js'
+import {type PreflightDeps, type PreflightOptions, ensureMise} from '#core/preflight.js'
+import type {Stage} from '#core/stage.js'
+import type {MiseInstaller} from '#providers/mise-install.js'
+import type {MiseState} from '#providers/mise-presence.js'
 
 /** Answers each probe from a queue; the last answer repeats. */
 function stubProbe(...answers: MiseState[]) {

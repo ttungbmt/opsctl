@@ -1,10 +1,10 @@
 import {access, readFile, writeFile} from 'node:fs/promises'
 
 import {describe, expect, it} from 'vitest'
-import {OpsError} from '../../src/core/errors.js'
-import type {AptRepo} from '../../src/core/repo.js'
-import type {Stage} from '../../src/core/stage.js'
-import type {RunOptions, RunResult} from '../../src/executor/exec.js'
+import {OpsError} from '#core/errors.js'
+import type {AptRepo} from '#core/repo.js'
+import type {Stage} from '#core/stage.js'
+import type {RunOptions, RunResult} from '#executor/exec.js'
 import {
   createAptRepoProvider,
   keyringPath,
@@ -14,8 +14,8 @@ import {
   servedBy,
   sourcesPath,
   sourcesStanza,
-} from '../../src/providers/apt-repo.js'
-import {FakeRunner} from '../helpers/fake-runner.js'
+} from '#providers/apt-repo.js'
+import {FakeRunner} from '#test/helpers/fake-runner.js'
 
 async function exists(path: string) {
   return access(path).then(() => true, () => false)

@@ -1,12 +1,12 @@
 import {describe, expect, it} from 'vitest'
-import {OpsError} from '../../../src/core/errors.js'
-import {type UninstallDeps, type UninstallOptions, type UninstallPlan, uninstallPackages} from '../../../src/core/package/uninstall.js'
-import type {PackageSpec} from '../../../src/core/package/spec.js'
-import {recipeIndex} from '../../../src/core/tool/recipe.js'
-import type {MiseDeclarations, MiseTable} from '../../../src/providers/mise-config.js'
-import type {InstallToolOptions, MiseTools, ToolState} from '../../../src/providers/mise-tools.js'
-import type {PathRemover, PathState} from '../../../src/providers/paths.js'
-import type {RemoveOptions, SystemPackageState, SystemPackages} from '../../../src/providers/system.js'
+import {OpsError} from '#core/errors.js'
+import {type UninstallDeps, type UninstallOptions, type UninstallPlan, uninstallPackages} from '#core/package/uninstall.js'
+import type {PackageSpec} from '#core/package/spec.js'
+import {recipeIndex} from '#core/tool/recipe.js'
+import type {MiseDeclarations, MiseTable} from '#providers/mise-config.js'
+import type {InstallToolOptions, MiseTools, ToolState} from '#providers/mise-tools.js'
+import type {PathRemover, PathState} from '#providers/paths.js'
+import type {RemoveOptions, SystemPackageState, SystemPackages} from '#providers/system.js'
 
 /** One shared log across every fake, so ordering between providers can be asserted. */
 type Log = string[]

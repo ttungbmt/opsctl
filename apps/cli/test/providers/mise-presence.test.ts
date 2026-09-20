@@ -1,6 +1,6 @@
 import {describe, expect, it} from 'vitest'
-import {PROBE_TIMEOUT_MS, probeMise, probeMiseReach} from '../../src/providers/mise-presence.js'
-import {FakeRunner} from '../helpers/fake-runner.js'
+import {PROBE_TIMEOUT_MS, probeMise, probeMiseReach} from '#providers/mise-presence.js'
+import {FakeRunner} from '#test/helpers/fake-runner.js'
 
 describe('probeMise', () => {
   it('is absent only when the binary is not on PATH', async () => {

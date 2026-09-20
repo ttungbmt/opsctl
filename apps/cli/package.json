@@ -12,6 +12,28 @@
     "config",
     "dist"
   ],
+  "imports": {
+    "#commands/*.js": {
+      "ops-src": "./src/commands/*.ts",
+      "default": "./dist/commands/*.js"
+    },
+    "#core/*.js": {
+      "ops-src": "./src/core/*.ts",
+      "default": "./dist/core/*.js"
+    },
+    "#executor/*.js": {
+      "ops-src": "./src/executor/*.ts",
+      "default": "./dist/executor/*.js"
+    },
+    "#providers/*.js": {
+      "ops-src": "./src/providers/*.ts",
+      "default": "./dist/providers/*.js"
+    },
+    "#test/*.js": {
+      "ops-src": "./test/*.ts",
+      "default": null
+    }
+  },
   "oclif": {
     "bin": "ops",
     "topics": {

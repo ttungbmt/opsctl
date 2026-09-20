@@ -1,9 +1,9 @@
 import ansis from 'ansis'
 import {describe, expect, it} from 'vitest'
-import {downloadProgress, renderBootstrapPlan, renderBootstrapResult, renderInstallResult, renderMiseReachNote, renderPreflight, renderPreflightPlan, renderProfileList, renderProfileShow, renderSetupPlan, renderSetupResult, renderUninstallPlan, renderUninstallResult, stageReporter} from '../../src/core/output.js'
-import type {BootstrapResult} from '../../src/core/bootstrap/run.js'
-import type {PreflightResult} from '../../src/core/preflight.js'
-import {ansiStyle, plainStyle} from '../../src/core/style.js'
+import {downloadProgress, renderBootstrapPlan, renderBootstrapResult, renderInstallResult, renderMiseReachNote, renderPreflight, renderPreflightPlan, renderProfileList, renderProfileShow, renderSetupPlan, renderSetupResult, renderUninstallPlan, renderUninstallResult, stageReporter} from '#core/output.js'
+import type {BootstrapResult} from '#core/bootstrap/run.js'
+import type {PreflightResult} from '#core/preflight.js'
+import {ansiStyle, plainStyle} from '#core/style.js'
 
 describe('renderInstallResult', () => {
   it('spells out why a package failed, so a wrong-origin build is actionable', () => {

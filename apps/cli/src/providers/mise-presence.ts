@@ -1,7 +1,7 @@
 import {z} from 'zod'
 
-import {CommandNotFoundError} from '../core/errors.js'
-import type {Runner} from '../executor/exec.js'
+import {CommandNotFoundError} from '#core/errors.js'
+import type {Runner} from '#executor/exec.js'
 
 /**
  * Whether the `mise` binary is where a subprocess would find it. Three states rather than a

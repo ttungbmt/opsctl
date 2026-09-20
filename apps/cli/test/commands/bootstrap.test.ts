@@ -1,8 +1,8 @@
 import {ux} from '@oclif/core'
 import {afterEach, describe, expect, it} from 'vitest'
-import Bootstrap from '../../src/commands/bootstrap.js'
-import {SECTION_ORDER} from '../../src/core/config.js'
-import {OpsError} from '../../src/core/errors.js'
+import Bootstrap from '#commands/bootstrap.js'
+import {SECTION_ORDER} from '#core/config.js'
+import {OpsError} from '#core/errors.js'
 
 /** The command with just enough oclif around it to call catch() directly. */
 function command(json = false): Bootstrap {

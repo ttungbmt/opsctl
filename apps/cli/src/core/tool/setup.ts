@@ -1,6 +1,6 @@
-import {CommandNotFoundError, OpsError} from '../errors.js'
+import {CommandNotFoundError, OpsError} from '#core/errors.js'
 import type {RecipeIndex, SetupStep} from './recipe.js'
-import type {RunOptions, Runner} from '../../executor/exec.js'
+import type {RunOptions, Runner} from '#executor/exec.js'
 
 export type SetupStatus = 'already-configured' | 'configured' | 'would-configure' | 'skipped' | 'failed'
 

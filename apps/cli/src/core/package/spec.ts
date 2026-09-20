@@ -1,4 +1,4 @@
-import {OpsError} from '../errors.js'
+import {OpsError} from '#core/errors.js'
 
 export type PackageSpec = `${string}:${string}`
 

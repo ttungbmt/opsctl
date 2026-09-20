@@ -1,6 +1,6 @@
 import {describe, expect, it} from 'vitest'
-import {createSystemPackages} from '../../src/providers/system.js'
-import {FakeRunner} from '../helpers/fake-runner.js'
+import {createSystemPackages} from '#providers/system.js'
+import {FakeRunner} from '#test/helpers/fake-runner.js'
 
 // Captured from `apt-get -s remove unzip` on Ubuntu; apt prints the autoremove
 // block BEFORE the REMOVED block, and only the latter is what this run would do.

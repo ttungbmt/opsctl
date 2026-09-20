@@ -3,9 +3,9 @@ import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 
 import {afterEach, describe, expect, it} from 'vitest'
-import {OpsError} from '../../src/core/errors.js'
-import {createDebInstaller, fetchDownload} from '../../src/providers/deb.js'
-import {FakeRunner} from '../helpers/fake-runner.js'
+import {OpsError} from '#core/errors.js'
+import {createDebInstaller, fetchDownload} from '#providers/deb.js'
+import {FakeRunner} from '#test/helpers/fake-runner.js'
 
 const URL = 'https://example.test/chrome.deb'
 

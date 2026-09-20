@@ -1,7 +1,7 @@
 import {ux} from '@oclif/core'
 import {afterEach, describe, expect, it} from 'vitest'
-import {OpsError} from '../../../src/core/errors.js'
-import ToolInstall from '../../../src/commands/tool/install.js'
+import {OpsError} from '#core/errors.js'
+import ToolInstall from '#commands/tool/install.js'
 
 /** The command with just enough oclif around it to call catch() directly. */
 function command(json = false): ToolInstall {

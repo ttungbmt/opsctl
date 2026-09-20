@@ -1,6 +1,6 @@
-import {SECTION_ORDER, type DotfilesSpec, type Profile, type SectionName, type ServiceSpec, type ShellSpec} from '../config.js'
-import {OpsError} from '../errors.js'
-import type {RecipeIndex} from '../tool/recipe.js'
+import {SECTION_ORDER, type DotfilesSpec, type Profile, type SectionName, type ServiceSpec, type ShellSpec} from '#core/config.js'
+import {OpsError} from '#core/errors.js'
+import type {RecipeIndex} from '#core/tool/recipe.js'
 
 /** A profile after `extends` composition: every list present, no add/remove left. */
 export interface ResolvedProfile {

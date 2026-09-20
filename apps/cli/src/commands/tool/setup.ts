@@ -1,11 +1,11 @@
 import {Args, Command, Flags} from '@oclif/core'
 
-import {loadConfig} from '../../core/config.js'
-import {OpsError} from '../../core/errors.js'
-import {renderSetupPlan, renderSetupResult} from '../../core/output.js'
-import {recipeIndex} from '../../core/tool/recipe.js'
-import {type SetupResult, setupTools} from '../../core/tool/setup.js'
-import {execaRunner} from '../../executor/exec.js'
+import {loadConfig} from '#core/config.js'
+import {OpsError} from '#core/errors.js'
+import {renderSetupPlan, renderSetupResult} from '#core/output.js'
+import {recipeIndex} from '#core/tool/recipe.js'
+import {type SetupResult, setupTools} from '#core/tool/setup.js'
+import {execaRunner} from '#executor/exec.js'
 
 export default class ToolSetup extends Command {
   static override summary = 'Configure an installed tool'

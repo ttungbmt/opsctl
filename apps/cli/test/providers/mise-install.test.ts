@@ -1,7 +1,7 @@
 import {describe, expect, it} from 'vitest'
-import type {Stage} from '../../src/core/stage.js'
-import {type MiseInstallOptions, createMiseInstaller} from '../../src/providers/mise-install.js'
-import {FakeRunner} from '../helpers/fake-runner.js'
+import type {Stage} from '#core/stage.js'
+import {type MiseInstallOptions, createMiseInstaller} from '#providers/mise-install.js'
+import {FakeRunner} from '#test/helpers/fake-runner.js'
 
 const SOURCE = {installer: 'https://mise.run', path: '/usr/local/bin/mise'}
 

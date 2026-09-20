@@ -1,6 +1,6 @@
 import {describe, expect, it} from 'vitest'
-import {OpsError} from '../../../src/core/errors.js'
-import {resolveSpecs} from '../../../src/core/package/resolve.js'
+import {OpsError} from '#core/errors.js'
+import {resolveSpecs} from '#core/package/resolve.js'
 
 const CHROME = {package: 'apt:google-chrome-stable', prepare: {deb: 'https://example.test/chrome.deb'}}
 

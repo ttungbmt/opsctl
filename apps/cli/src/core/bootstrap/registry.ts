@@ -1,4 +1,4 @@
-import type {InstallDeps} from '../package/install.js'
+import type {InstallDeps} from '#core/package/install.js'
 import type {SectionRegistry} from './section.js'
 import {createInstallSection} from './sections/install.js'
 import {type SetupSectionDeps, createSetupSection} from './sections/setup.js'

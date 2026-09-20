@@ -1,8 +1,8 @@
 import {describe, expect, it} from 'vitest'
-import type {Profile} from '../../../src/core/config.js'
-import {OpsError} from '../../../src/core/errors.js'
-import {declaresSection, profileIndex} from '../../../src/core/profile/resolve.js'
-import {recipeIndex} from '../../../src/core/tool/recipe.js'
+import type {Profile} from '#core/config.js'
+import {OpsError} from '#core/errors.js'
+import {declaresSection, profileIndex} from '#core/profile/resolve.js'
+import {recipeIndex} from '#core/tool/recipe.js'
 
 const index = (profiles: Record<string, Profile>, recipes = recipeIndex()) => profileIndex(profiles, {recipes})
 

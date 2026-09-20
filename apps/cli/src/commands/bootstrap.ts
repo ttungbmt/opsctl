@@ -1,9 +1,9 @@
 import {Args, Command, Flags, ux} from '@oclif/core'
 
-import {buildSections} from '../core/bootstrap/registry.js'
-import {type BootstrapOptions, type BootstrapResult, bootstrapProfile, haltedBeforePlan} from '../core/bootstrap/run.js'
-import {SECTION_ORDER, type SectionName, loadConfig} from '../core/config.js'
-import {OpsError} from '../core/errors.js'
+import {buildSections} from '#core/bootstrap/registry.js'
+import {type BootstrapOptions, type BootstrapResult, bootstrapProfile, haltedBeforePlan} from '#core/bootstrap/run.js'
+import {SECTION_ORDER, type SectionName, loadConfig} from '#core/config.js'
+import {OpsError} from '#core/errors.js'
 import {
   downloadProgress,
   renderBootstrapPlan,
@@ -12,19 +12,19 @@ import {
   renderMiseReachNote,
   renderPreflightPlan,
   stageReporter,
-} from '../core/output.js'
-import {type PreflightResult, ensureMise} from '../core/preflight.js'
-import {profileIndex} from '../core/profile/resolve.js'
-import {styleFor} from '../core/style.js'
-import {recipeIndex} from '../core/tool/recipe.js'
-import {execaRunner, sudoReady} from '../executor/exec.js'
-import {createAptRepoProvider} from '../providers/apt-repo.js'
-import {createDebInstaller} from '../providers/deb.js'
-import {createMiseBootstrap} from '../providers/mise-bootstrap.js'
-import {createMiseInstaller} from '../providers/mise-install.js'
-import {probeMise, probeMiseReach} from '../providers/mise-presence.js'
-import {createMiseTools} from '../providers/mise-tools.js'
-import {detectSystemManager} from '../providers/os.js'
+} from '#core/output.js'
+import {type PreflightResult, ensureMise} from '#core/preflight.js'
+import {profileIndex} from '#core/profile/resolve.js'
+import {styleFor} from '#core/style.js'
+import {recipeIndex} from '#core/tool/recipe.js'
+import {execaRunner, sudoReady} from '#executor/exec.js'
+import {createAptRepoProvider} from '#providers/apt-repo.js'
+import {createDebInstaller} from '#providers/deb.js'
+import {createMiseBootstrap} from '#providers/mise-bootstrap.js'
+import {createMiseInstaller} from '#providers/mise-install.js'
+import {probeMise, probeMiseReach} from '#providers/mise-presence.js'
+import {createMiseTools} from '#providers/mise-tools.js'
+import {detectSystemManager} from '#providers/os.js'
 
 /**
  * What `ops bootstrap` runs with no argument. A constant rather than config data because

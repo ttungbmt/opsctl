@@ -4,8 +4,8 @@ import {
   type InstallResult,
   type PackageStatus,
   installPackages,
-} from '../../package/install.js'
-import type {Change, ChangeStatus, Section, SectionContext} from '../section.js'
+} from '#core/package/install.js'
+import type {Change, ChangeStatus, Section, SectionContext} from '#core/bootstrap/section.js'
 
 const STATUS: Record<PackageStatus, ChangeStatus> = {
   'already-installed': 'satisfied',

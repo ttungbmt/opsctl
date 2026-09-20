@@ -1,5 +1,5 @@
 import {describe, expect, it} from 'vitest'
-import ProfileShow from '../../../src/commands/profile/show.js'
+import ProfileShow from '#commands/profile/show.js'
 
 describe('ProfileShow', () => {
   it('takes a required profile name', () => {

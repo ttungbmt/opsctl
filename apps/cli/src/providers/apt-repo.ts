@@ -3,10 +3,10 @@ import {readFile as fsReadFile, rm, writeFile} from 'node:fs/promises'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 
-import {OpsError} from '../core/errors.js'
-import type {AptRepo} from '../core/repo.js'
-import type {Stage} from '../core/stage.js'
-import type {RunOptions, Runner} from '../executor/exec.js'
+import {OpsError} from '#core/errors.js'
+import type {AptRepo} from '#core/repo.js'
+import type {Stage} from '#core/stage.js'
+import type {RunOptions, Runner} from '#executor/exec.js'
 import {type Download, fetchDownload} from './deb.js'
 
 /** Where ops keeps the files it owns for a repo. The `ops-` stem marks them as managed. */

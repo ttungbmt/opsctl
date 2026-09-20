@@ -1,10 +1,10 @@
 import {describe, expect, it} from 'vitest'
-import type {BootstrapOptions, SectionContext} from '../../../../src/core/bootstrap/section.js'
-import {createSetupSection} from '../../../../src/core/bootstrap/sections/setup.js'
-import {CommandNotFoundError} from '../../../../src/core/errors.js'
-import {profileIndex} from '../../../../src/core/profile/resolve.js'
-import {recipeIndex} from '../../../../src/core/tool/recipe.js'
-import {FakeRunner} from '../../../helpers/fake-runner.js'
+import type {BootstrapOptions, SectionContext} from '#core/bootstrap/section.js'
+import {createSetupSection} from '#core/bootstrap/sections/setup.js'
+import {CommandNotFoundError} from '#core/errors.js'
+import {profileIndex} from '#core/profile/resolve.js'
+import {recipeIndex} from '#core/tool/recipe.js'
+import {FakeRunner} from '#test/helpers/fake-runner.js'
 
 const recipes = recipeIndex({
   ab: {package: 'mise:ab', setup: [{name: 'browsers', check: ['ab', 'doctor'], run: ['ab', 'install']}]},

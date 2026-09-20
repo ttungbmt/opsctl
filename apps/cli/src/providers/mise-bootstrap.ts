@@ -1,8 +1,8 @@
 import {z} from 'zod'
 
-import {CommandNotFoundError, OpsError} from '../core/errors.js'
-import type {PackageSpec} from '../core/package/spec.js'
-import {type RunOptions, type RunResult, type Runner} from '../executor/exec.js'
+import {CommandNotFoundError, OpsError} from '#core/errors.js'
+import type {PackageSpec} from '#core/package/spec.js'
+import {type RunOptions, type RunResult, type Runner} from '#executor/exec.js'
 
 export interface PackageState {
   spec: PackageSpec

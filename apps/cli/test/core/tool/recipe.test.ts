@@ -1,6 +1,6 @@
 import {describe, expect, it} from 'vitest'
-import {OpsError} from '../../../src/core/errors.js'
-import {type Recipe, recipeIndex} from '../../../src/core/tool/recipe.js'
+import {OpsError} from '#core/errors.js'
+import {type Recipe, recipeIndex} from '#core/tool/recipe.js'
 
 /** YAML can carry keys the Recipe type does not have; RecipeSchema is loose and keeps them. */
 const fromYaml = (value: unknown) => value as Record<string, Recipe>

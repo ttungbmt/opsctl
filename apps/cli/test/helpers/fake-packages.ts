@@ -2,12 +2,12 @@
  * Fake package providers, shared by the install tests and the bootstrap section tests.
  * They record what was asked of them so a test can assert on the calls, not just the result.
  */
-import type {PackageSpec} from '../../src/core/package/spec.js'
-import type {AptRepo} from '../../src/core/repo.js'
-import type {AptRepoProvider, EnsureRepoOptions, VerifyResult} from '../../src/providers/apt-repo.js'
-import type {DebInstaller, InstallDebOptions} from '../../src/providers/deb.js'
-import type {ApplyOptions, MiseBootstrap, PackageState} from '../../src/providers/mise-bootstrap.js'
-import type {InstallToolOptions, MiseTools, ToolState} from '../../src/providers/mise-tools.js'
+import type {PackageSpec} from '#core/package/spec.js'
+import type {AptRepo} from '#core/repo.js'
+import type {AptRepoProvider, EnsureRepoOptions, VerifyResult} from '#providers/apt-repo.js'
+import type {DebInstaller, InstallDebOptions} from '#providers/deb.js'
+import type {ApplyOptions, MiseBootstrap, PackageState} from '#providers/mise-bootstrap.js'
+import type {InstallToolOptions, MiseTools, ToolState} from '#providers/mise-tools.js'
 
 export class FakeRepos implements AptRepoProvider {
   ensured: {repo: AptRepo; pkg: string; opts: EnsureRepoOptions}[] = []

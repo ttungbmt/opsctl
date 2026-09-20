@@ -3,9 +3,9 @@ import {rm} from 'node:fs/promises'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 
-import type {MiseConfig} from '../core/config.js'
-import type {Stage} from '../core/stage.js'
-import type {RunOptions, Runner} from '../executor/exec.js'
+import type {MiseConfig} from '#core/config.js'
+import type {Stage} from '#core/stage.js'
+import type {RunOptions, Runner} from '#executor/exec.js'
 import {type Download, type OnProgress, fetchDownload} from './deb.js'
 
 export interface MiseInstallOptions {

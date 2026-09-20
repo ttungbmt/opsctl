@@ -7,9 +7,9 @@ import {Readable, Transform} from 'node:stream'
 import {pipeline} from 'node:stream/promises'
 import type {ReadableStream as NodeReadableStream} from 'node:stream/web'
 
-import {OpsError} from '../core/errors.js'
-import type {Stage} from '../core/stage.js'
-import type {RunOptions, Runner} from '../executor/exec.js'
+import {OpsError} from '#core/errors.js'
+import type {Stage} from '#core/stage.js'
+import type {RunOptions, Runner} from '#executor/exec.js'
 
 /** Reports bytes written so far; `total` is absent when the server sends no content-length. */
 export type OnProgress = (done: number, total?: number) => void

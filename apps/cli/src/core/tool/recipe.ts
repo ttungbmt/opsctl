@@ -1,9 +1,9 @@
 import {homedir} from 'node:os'
 import {isAbsolute, join, normalize} from 'node:path'
 
-import {OpsError} from '../errors.js'
-import type {AptRepo, RepoConfig} from '../repo.js'
-import {type PackageSpec, toPackageSpec} from '../package/spec.js'
+import {OpsError} from '#core/errors.js'
+import type {AptRepo, RepoConfig} from '#core/repo.js'
+import {type PackageSpec, toPackageSpec} from '#core/package/spec.js'
 
 /** How to make a package installable before the package manager can see it. */
 export interface PrepareStep {

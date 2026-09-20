@@ -1,6 +1,6 @@
 import {describe, expect, it} from 'vitest'
-import {OpsError} from '../../src/core/errors.js'
-import {detectSystemManager, managerFor, parseOsRelease} from '../../src/providers/os.js'
+import {OpsError} from '#core/errors.js'
+import {detectSystemManager, managerFor, parseOsRelease} from '#providers/os.js'
 
 const UBUNTU = 'PRETTY_NAME="Ubuntu 24.04 LTS"\nID=ubuntu\nID_LIKE=debian\n'
 const DEBIAN = 'ID=debian\n'

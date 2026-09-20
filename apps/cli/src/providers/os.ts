@@ -1,6 +1,6 @@
 import {readFile as fsReadFile} from 'node:fs/promises'
 
-import {OpsError} from '../core/errors.js'
+import {OpsError} from '#core/errors.js'
 
 export type SystemManager = 'apt' | 'dnf'
 

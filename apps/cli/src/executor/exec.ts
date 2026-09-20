@@ -1,6 +1,6 @@
 import {execa} from 'execa'
 
-import {CommandNotFoundError} from '../core/errors.js'
+import {CommandNotFoundError} from '#core/errors.js'
 
 export interface RunOptions {
   /** capture (default): collect output; inherit: stream stdout/stderr to the terminal. */

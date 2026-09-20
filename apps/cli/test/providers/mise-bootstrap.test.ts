@@ -1,8 +1,8 @@
 import {describe, expect, it} from 'vitest'
-import {OpsError} from '../../src/core/errors.js'
-import {CommandNotFoundError} from '../../src/core/errors.js'
-import {createMiseBootstrap} from '../../src/providers/mise-bootstrap.js'
-import {FakeRunner} from '../helpers/fake-runner.js'
+import {OpsError} from '#core/errors.js'
+import {CommandNotFoundError} from '#core/errors.js'
+import {createMiseBootstrap} from '#providers/mise-bootstrap.js'
+import {FakeRunner} from '#test/helpers/fake-runner.js'
 
 // Shape observed from `mise bootstrap packages status --json` on mise 2026.9.11.
 const STATUS = JSON.stringify({

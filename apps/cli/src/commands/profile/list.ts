@@ -1,11 +1,11 @@
 import {Command} from '@oclif/core'
 
-import {loadConfig} from '../../core/config.js'
-import {OpsError} from '../../core/errors.js'
-import {renderProfileList} from '../../core/output.js'
-import {type ProfileSummary, profileIndex} from '../../core/profile/resolve.js'
-import {styleFor} from '../../core/style.js'
-import {recipeIndex} from '../../core/tool/recipe.js'
+import {loadConfig} from '#core/config.js'
+import {OpsError} from '#core/errors.js'
+import {renderProfileList} from '#core/output.js'
+import {type ProfileSummary, profileIndex} from '#core/profile/resolve.js'
+import {styleFor} from '#core/style.js'
+import {recipeIndex} from '#core/tool/recipe.js'
 
 export default class ProfileList extends Command {
   static override summary = 'List the machine profiles this config defines'

@@ -1,7 +1,7 @@
-import {SECTION_ORDER, type SectionName} from '../config.js'
-import {OpsError} from '../errors.js'
-import type {PreflightResult} from '../preflight.js'
-import {type ProfileIndex, type ResolvedProfile, declaresSection} from '../profile/resolve.js'
+import {SECTION_ORDER, type SectionName} from '#core/config.js'
+import {OpsError} from '#core/errors.js'
+import type {PreflightResult} from '#core/preflight.js'
+import {type ProfileIndex, type ResolvedProfile, declaresSection} from '#core/profile/resolve.js'
 import {
   type BootstrapOptions,
   type Change,

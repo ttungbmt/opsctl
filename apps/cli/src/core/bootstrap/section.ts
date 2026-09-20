@@ -1,10 +1,10 @@
-import type {Change} from '../change.js'
-import type {SectionName} from '../config.js'
-import type {ResolvedProfile} from '../profile/resolve.js'
+import type {Change} from '#core/change.js'
+import type {SectionName} from '#core/config.js'
+import type {ResolvedProfile} from '#core/profile/resolve.js'
 
 // A change is not a bootstrap concept -- the mise preflight reports them too, and
 // `ops tool install` must not import from core/bootstrap/.
-export type {Change, ChangeStatus} from '../change.js'
+export type {Change, ChangeStatus} from '#core/change.js'
 
 export interface SectionPlan {
   section: SectionName

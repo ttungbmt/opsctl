@@ -2,8 +2,8 @@ import {constants} from 'node:fs'
 import {access, lstat, rm} from 'node:fs/promises'
 import {dirname} from 'node:path'
 
-import {OpsError} from '../core/errors.js'
-import type {Runner} from '../executor/exec.js'
+import {OpsError} from '#core/errors.js'
+import type {Runner} from '#executor/exec.js'
 
 export interface PathState {
   path: string

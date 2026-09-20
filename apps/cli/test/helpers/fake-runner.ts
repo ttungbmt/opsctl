@@ -1,5 +1,5 @@
-import {CommandNotFoundError} from '../../src/core/errors.js'
-import type {RunOptions, RunResult, Runner} from '../../src/executor/exec.js'
+import {CommandNotFoundError} from '#core/errors.js'
+import type {RunOptions, RunResult, Runner} from '#executor/exec.js'
 
 interface Response {
   prefix: string

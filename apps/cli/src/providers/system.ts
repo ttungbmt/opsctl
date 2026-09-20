@@ -1,6 +1,6 @@
-import {CommandNotFoundError, OpsError} from '../core/errors.js'
-import {type PackageSpec, toolName} from '../core/package/spec.js'
-import type {Runner} from '../executor/exec.js'
+import {CommandNotFoundError, OpsError} from '#core/errors.js'
+import {type PackageSpec, toolName} from '#core/package/spec.js'
+import type {Runner} from '#executor/exec.js'
 import type {SystemManager} from './os.js'
 
 export interface SystemPackageState {

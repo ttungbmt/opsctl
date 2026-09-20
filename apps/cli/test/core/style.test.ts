@@ -1,6 +1,6 @@
 import ansis from 'ansis'
 import {describe, expect, it} from 'vitest'
-import {ansiStyle, plainStyle, styleFor} from '../../src/core/style.js'
+import {ansiStyle, plainStyle, styleFor} from '#core/style.js'
 
 const KEYS = ['ok', 'add', 'warn', 'fail', 'muted', 'heading'] as const
 

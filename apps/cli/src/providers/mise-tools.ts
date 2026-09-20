@@ -1,7 +1,7 @@
 import {z} from 'zod'
 
-import {CommandNotFoundError, OpsError} from '../core/errors.js'
-import {type RunOptions, type RunResult, type Runner} from '../executor/exec.js'
+import {CommandNotFoundError, OpsError} from '#core/errors.js'
+import {type RunOptions, type RunResult, type Runner} from '#executor/exec.js'
 
 export interface ToolState {
   /** Tool id as written in [tools], e.g. "fastfetch" or "aqua:owner/repo". */

@@ -1,7 +1,7 @@
 import {Args, Command, Flags, ux} from '@oclif/core'
 
-import {loadConfig} from '../../core/config.js'
-import {OpsError} from '../../core/errors.js'
+import {loadConfig} from '#core/config.js'
+import {OpsError} from '#core/errors.js'
 import {
   downloadProgress,
   renderInstallResult,
@@ -9,20 +9,20 @@ import {
   renderMiseReachNote,
   renderPreflightPlan,
   stageReporter,
-} from '../../core/output.js'
-import {styleFor} from '../../core/style.js'
-import {type InstallOptions, type InstallResult, haltedBeforeInstall, installPackages} from '../../core/package/install.js'
-import {isToolSpec} from '../../core/package/spec.js'
-import {type PreflightResult, ensureMise} from '../../core/preflight.js'
-import {recipeIndex} from '../../core/tool/recipe.js'
-import {execaRunner, sudoReady} from '../../executor/exec.js'
-import {createAptRepoProvider} from '../../providers/apt-repo.js'
-import {createDebInstaller} from '../../providers/deb.js'
-import {createMiseBootstrap} from '../../providers/mise-bootstrap.js'
-import {createMiseInstaller} from '../../providers/mise-install.js'
-import {probeMise, probeMiseReach} from '../../providers/mise-presence.js'
-import {createMiseTools} from '../../providers/mise-tools.js'
-import {detectSystemManager} from '../../providers/os.js'
+} from '#core/output.js'
+import {styleFor} from '#core/style.js'
+import {type InstallOptions, type InstallResult, haltedBeforeInstall, installPackages} from '#core/package/install.js'
+import {isToolSpec} from '#core/package/spec.js'
+import {type PreflightResult, ensureMise} from '#core/preflight.js'
+import {recipeIndex} from '#core/tool/recipe.js'
+import {execaRunner, sudoReady} from '#executor/exec.js'
+import {createAptRepoProvider} from '#providers/apt-repo.js'
+import {createDebInstaller} from '#providers/deb.js'
+import {createMiseBootstrap} from '#providers/mise-bootstrap.js'
+import {createMiseInstaller} from '#providers/mise-install.js'
+import {probeMise, probeMiseReach} from '#providers/mise-presence.js'
+import {createMiseTools} from '#providers/mise-tools.js'
+import {detectSystemManager} from '#providers/os.js'
 
 export default class ToolInstall extends Command {
   static override summary = 'Install a tool'

@@ -1,10 +1,10 @@
 import {describe, expect, it} from 'vitest'
-import type {BootstrapOptions, SectionContext} from '../../../../src/core/bootstrap/section.js'
-import {createInstallSection} from '../../../../src/core/bootstrap/sections/install.js'
-import type {InstallDeps} from '../../../../src/core/package/install.js'
-import {profileIndex} from '../../../../src/core/profile/resolve.js'
-import {recipeIndex} from '../../../../src/core/tool/recipe.js'
-import {FakeDeb, FakeMise, FakeRepos, FakeTools} from '../../../helpers/fake-packages.js'
+import type {BootstrapOptions, SectionContext} from '#core/bootstrap/section.js'
+import {createInstallSection} from '#core/bootstrap/sections/install.js'
+import type {InstallDeps} from '#core/package/install.js'
+import {profileIndex} from '#core/profile/resolve.js'
+import {recipeIndex} from '#core/tool/recipe.js'
+import {FakeDeb, FakeMise, FakeRepos, FakeTools} from '#test/helpers/fake-packages.js'
 
 function setup() {
   const mise = new FakeMise()

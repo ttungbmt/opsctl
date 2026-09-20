@@ -3,8 +3,8 @@ import {open, rename, rm, stat, readFile as fsReadFile} from 'node:fs/promises'
 import {homedir} from 'node:os'
 import {basename, dirname, join} from 'node:path'
 
-import {CommandNotFoundError, OpsError} from '../core/errors.js'
-import type {Runner} from '../executor/exec.js'
+import {CommandNotFoundError, OpsError} from '#core/errors.js'
+import type {Runner} from '#executor/exec.js'
 
 /** The tables ops declares into, and so the only ones it will edit. */
 export type MiseTable = 'bootstrap.packages' | 'tools'

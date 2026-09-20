@@ -1,11 +1,11 @@
 import {Args, Command, Flags} from '@oclif/core'
 
-import {type Profile, loadConfig} from '../../core/config.js'
-import {OpsError} from '../../core/errors.js'
-import {renderProfileShow} from '../../core/output.js'
-import {type ResolvedProfile, profileIndex} from '../../core/profile/resolve.js'
-import {styleFor} from '../../core/style.js'
-import {recipeIndex} from '../../core/tool/recipe.js'
+import {type Profile, loadConfig} from '#core/config.js'
+import {OpsError} from '#core/errors.js'
+import {renderProfileShow} from '#core/output.js'
+import {type ResolvedProfile, profileIndex} from '#core/profile/resolve.js'
+import {styleFor} from '#core/style.js'
+import {recipeIndex} from '#core/tool/recipe.js'
 
 export default class ProfileShow extends Command {
   static override summary = 'Show a profile, composed through its extends chain'

@@ -1,10 +1,10 @@
 import {describe, expect, it, vi} from 'vitest'
-import {bootstrapProfile, haltedBeforePlan, type BootstrapDeps} from '../../../src/core/bootstrap/run.js'
-import type {BootstrapOptions, Change, Section, SectionPlan, SectionRegistry} from '../../../src/core/bootstrap/section.js'
-import type {SectionName} from '../../../src/core/config.js'
-import {OpsError} from '../../../src/core/errors.js'
-import type {PreflightResult} from '../../../src/core/preflight.js'
-import {profileIndex} from '../../../src/core/profile/resolve.js'
+import {bootstrapProfile, haltedBeforePlan, type BootstrapDeps} from '#core/bootstrap/run.js'
+import type {BootstrapOptions, Change, Section, SectionPlan, SectionRegistry} from '#core/bootstrap/section.js'
+import type {SectionName} from '#core/config.js'
+import {OpsError} from '#core/errors.js'
+import type {PreflightResult} from '#core/preflight.js'
+import {profileIndex} from '#core/profile/resolve.js'
 
 /** Records plan/apply order across every section in one shared log. */
 function stub(

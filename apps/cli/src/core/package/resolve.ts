@@ -1,5 +1,5 @@
-import type {SystemManager} from '../../providers/os.js'
-import type {Recipe} from '../tool/recipe.js'
+import type {SystemManager} from '#providers/os.js'
+import type {Recipe} from '#core/tool/recipe.js'
 import {type PackageSpec, TOOL_MANAGER, toPackageSpec, withoutVersion} from './spec.js'
 
 export interface ResolveDeps {

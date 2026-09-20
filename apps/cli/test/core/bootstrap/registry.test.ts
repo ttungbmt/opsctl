@@ -1,8 +1,8 @@
 import {describe, expect, it} from 'vitest'
-import {buildSections} from '../../../src/core/bootstrap/registry.js'
-import {recipeIndex} from '../../../src/core/tool/recipe.js'
-import {FakeDeb, FakeMise, FakeRepos, FakeTools} from '../../helpers/fake-packages.js'
-import {FakeRunner} from '../../helpers/fake-runner.js'
+import {buildSections} from '#core/bootstrap/registry.js'
+import {recipeIndex} from '#core/tool/recipe.js'
+import {FakeDeb, FakeMise, FakeRepos, FakeTools} from '#test/helpers/fake-packages.js'
+import {FakeRunner} from '#test/helpers/fake-runner.js'
 
 const sections = () =>
   buildSections({

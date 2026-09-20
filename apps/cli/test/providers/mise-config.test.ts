@@ -1,7 +1,7 @@
 import {describe, expect, it} from 'vitest'
-import {OpsError} from '../../src/core/errors.js'
-import {type ConfigFile, createMiseDeclarations, miseGlobalConfigPath, removeTableKey} from '../../src/providers/mise-config.js'
-import {FakeRunner} from '../helpers/fake-runner.js'
+import {OpsError} from '#core/errors.js'
+import {type ConfigFile, createMiseDeclarations, miseGlobalConfigPath, removeTableKey} from '#providers/mise-config.js'
+import {FakeRunner} from '#test/helpers/fake-runner.js'
 
 /** Reproduces the shape of a real ~/.config/mise/config.toml, comments and all. */
 const CONFIG = `[tools]

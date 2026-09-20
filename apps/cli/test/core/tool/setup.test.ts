@@ -1,8 +1,8 @@
 import {describe, expect, it} from 'vitest'
-import {CommandNotFoundError, OpsError} from '../../../src/core/errors.js'
-import {type Recipe, recipeIndex} from '../../../src/core/tool/recipe.js'
-import {type SetupDeps, type SetupOptions, type SetupStepResult, setupTools} from '../../../src/core/tool/setup.js'
-import {FakeRunner} from '../../helpers/fake-runner.js'
+import {CommandNotFoundError, OpsError} from '#core/errors.js'
+import {type Recipe, recipeIndex} from '#core/tool/recipe.js'
+import {type SetupDeps, type SetupOptions, type SetupStepResult, setupTools} from '#core/tool/setup.js'
+import {FakeRunner} from '#test/helpers/fake-runner.js'
 
 const BROWSERS = {name: 'browsers', check: ['ab', 'doctor'], run: ['ab', 'install']}
 const DEPS = {name: 'deps', check: ['ab', 'deps'], run: ['ab', 'install-deps']}

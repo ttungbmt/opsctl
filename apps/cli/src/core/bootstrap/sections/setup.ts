@@ -1,8 +1,8 @@
-import type {Runner} from '../../../executor/exec.js'
-import {withoutVersion} from '../../package/spec.js'
-import type {RecipeIndex} from '../../tool/recipe.js'
-import {type SetupOptions, type SetupResult, type SetupStatus, setupTools} from '../../tool/setup.js'
-import type {Change, ChangeStatus, Section, SectionContext} from '../section.js'
+import type {Runner} from '#executor/exec.js'
+import {withoutVersion} from '#core/package/spec.js'
+import type {RecipeIndex} from '#core/tool/recipe.js'
+import {type SetupOptions, type SetupResult, type SetupStatus, setupTools} from '#core/tool/setup.js'
+import type {Change, ChangeStatus, Section, SectionContext} from '#core/bootstrap/section.js'
 
 export interface SetupSectionDeps {
   recipes: RecipeIndex
