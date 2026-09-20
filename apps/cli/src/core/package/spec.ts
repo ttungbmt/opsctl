@@ -37,6 +37,14 @@ export function toolName(spec: PackageSpec): string {
   return spec.slice(spec.indexOf(':') + 1)
 }
 
+/**
+ * "apt:firefox" → "firefox": the name the system package manager knows. Deliberately not
+ * toolName, though the slicing matches -- a package and a tool are different concepts here.
+ */
+export function packageName(spec: PackageSpec): string {
+  return spec.slice(spec.indexOf(':') + 1)
+}
+
 /** The key mise uses for the tool in [tools] and `mise ls`: the name without an "@version" suffix. */
 export function toolKey(spec: PackageSpec): string {
   const name = toolName(spec)

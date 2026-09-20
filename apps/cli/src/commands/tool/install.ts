@@ -7,25 +7,40 @@ import {styleFor} from '../../core/style.js'
 import {type InstallResult, installPackages} from '../../core/package/install.js'
 import {recipeIndex} from '../../core/tool/recipe.js'
 import {execaRunner, sudoReady} from '../../executor/exec.js'
+import {createAptRepoProvider} from '../../providers/apt-repo.js'
 import {createDebInstaller} from '../../providers/deb.js'
 import {createMiseBootstrap} from '../../providers/mise-bootstrap.js'
 import {createMiseTools} from '../../providers/mise-tools.js'
 import {detectSystemManager} from '../../providers/os.js'
-import type {Stage} from '../../providers/deb.js'
+import {type Stage, stageLabel} from '../../core/stage.js'
 
 /**
- * Hands the terminal from the progress line to the spinner. The progress line is written
- * with \r and never newline-terminated, so without this the spinner overwrites it.
+ * Drives the terminal around the .deb work: names the file before the progress line
+ * starts, then closes that line off so the spinner does not overwrite it. The progress
+ * line is written with \r and never newline-terminated, hence the handover.
  */
-export function spinnerHandover(
-  start: (label: string) => void,
+export function stageReporter(
   write: (s: string) => void,
   showsProgress: boolean,
-): (stage: Stage, spec: string) => void {
-  return (stage, spec) => {
-    if (stage !== 'installing') return
-    if (showsProgress) write('\n')
-    start(`installing ${spec}`)
+  start?: (label: string) => void,
+  stop?: () => void,
+): (stage: Stage, subject: string) => void {
+  return (stage, subject) => {
+    // apt prints its own download and install; a spinner repainting over it shreds both.
+    if (stage === 'streaming') {
+      stop?.()
+      return
+    }
+
+    if (stage === 'downloading') {
+      if (showsProgress) write(`downloading ${subject}\n`)
+      return
+    }
+
+    // Only the .deb download leaves an unterminated \r line, so only its successor
+    // has a row to hand over; repo stages must not steal a newline they never needed.
+    if (stage === 'installing' && showsProgress) write('\n')
+    start?.(stageLabel(stage, subject))
   }
 }
 
@@ -49,6 +64,10 @@ export default class ToolInstall extends Command {
   }
   static override flags = {
     'dry-run': Flags.boolean({default: false, summary: 'Show what would be installed without writing config or installing'}),
+    force: Flags.boolean({
+      default: false,
+      summary: "Reinstall through a recipe's repo when a build from somewhere else is installed",
+    }),
     'non-interactive': Flags.boolean({default: false, summary: 'Never prompt (implies --yes); fail if sudo needs a password'}),
     yes: Flags.boolean({char: 'y', default: false, summary: 'Skip the confirmation prompt'}),
   }
@@ -60,7 +79,12 @@ export default class ToolInstall extends Command {
     const onProgress =
       this.jsonEnabled() || !process.stderr.isTTY
         ? undefined
-        : downloadProgress((line) => process.stderr.write(`\r${line.padEnd(48)}`))
+        : downloadProgress(
+            // \x1b[K erases to end of line: the bar's width varies, so padding cannot clear it.
+            (line) => process.stderr.write(`\r\u001B[K${line}`),
+            Date.now,
+            () => process.stderr.columns || 80,
+          )
 
     // A spinner and sudo's password prompt would fight over the terminal, so spin only
     // once sudo is known not to ask. Otherwise apt keeps streaming, as it does today.
@@ -70,6 +94,7 @@ export default class ToolInstall extends Command {
     const result = await installPackages(
       {
         dryRun: flags['dry-run'],
+        force: flags.force,
         json: this.jsonEnabled(),
         nonInteractive: flags['non-interactive'],
         packages: argv as string[],
@@ -78,14 +103,25 @@ export default class ToolInstall extends Command {
       {
         deb: createDebInstaller(execaRunner),
         detectManager: () => detectSystemManager(),
+        repos: createAptRepoProvider(execaRunner),
         isTTY: Boolean(process.stdin.isTTY),
         captureOutput: spin,
         mise: createMiseBootstrap(execaRunner),
         onProgress,
-        onStage: spin
-          ? spinnerHandover((label) => ux.action.start(label), (text) => process.stderr.write(text), Boolean(onProgress))
-          : undefined,
-        recipes: recipeIndex(config.tool),
+        onStage:
+          spin || onProgress
+            ? stageReporter(
+                (text) => process.stderr.write(text),
+                Boolean(onProgress),
+                spin ? (label) => ux.action.start(label) : undefined,
+                spin
+                  ? () => {
+                      if (ux.action.running) ux.action.stop()
+                    }
+                  : undefined,
+              )
+            : undefined,
+        recipes: recipeIndex(config.tool, {repos: config.repo}),
         sudoReady: () => sudoReady(execaRunner),
         systemPreferred: new Set(config.package.system),
         tools: createMiseTools(execaRunner),

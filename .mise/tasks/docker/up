@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+#MISE description="Start the long-lived test container (state survives between commands)"
+#MISE alias="up"
+# Not `mise up`, which upgrades mise's own tools.
+set -euo pipefail
+cd "${MISE_PROJECT_ROOT:-$(dirname "${BASH_SOURCE[0]}")/../../..}"
+exec docker compose up -d

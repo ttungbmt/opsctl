@@ -1,6 +1,6 @@
 # Vendor apt repositories — Design
 
-Date: 2026-09-20 · Status: proposed
+Date: 2026-09-20 · Status: implemented
 
 Builds on [`2026-09-20-tool-recipes-design.md`](2026-09-20-tool-recipes-design.md).
 
@@ -124,17 +124,33 @@ The point of this design is that success cannot be claimed falsely, so apt's own
 resolution is checked with `apt-cache policy <pkg>` (read-only, unprivileged, run
 under `LC_ALL=C` because the field names are localised):
 
-- **On the install path**, `ensure` verifies before `mise.apply`. A candidate not
-  served by the pinned origin throws `REPO_PIN_UNSATISFIED` and nothing is
-  installed.
-- **On the already-installed path**, the check still runs. A package installed from
-  the wrong origin — the Ubuntu shim on a machine that already had it — reports
-  `failed` with an actionable message instead of `already-installed`, and
-  `--force` treats it as missing so apt can switch it to Mozilla's build.
+- **On the install path**, `ensure` verifies **the candidate** before `mise.apply` —
+  "will apt install the right thing?". A candidate not served by the pinned origin
+  throws `REPO_PIN_UNSATISFIED` and nothing is installed. It must be the candidate,
+  not the installed version: `--force` replaces a wrong-origin build, and an
+  installed-first check there would reject the very case it is being asked to fix.
+- **On the already-installed path**, `verify` asks the other question — "is the right
+  thing on this machine?" — and so judges **the installed version**, falling back to
+  the candidate when nothing is installed. A package installed from the wrong origin
+  (the Ubuntu shim on a machine that already had it) reports `failed` with an
+  actionable message instead of `already-installed`, and `--force` treats it as
+  missing so apt can switch it to Mozilla's build.
+
+Judging the candidate in both places was the original mistake, and it fails in exactly
+the case the design exists for: once the repo is configured, a machine still holding
+the shim reports `Installed: 1:1snap1-0ubuntu5` but `Candidate: 156.0~build1`, so a
+candidate-based check calls it healthy.
 
 `apt-cache madison` was rejected: it is format-stable but knows nothing about pin
 priority, so it cannot prove the pin took effect. `apt-get -s install` was rejected:
 it is localised *and* labels the origin from the unusable `Origin:` field.
+
+Parsing `apt-cache policy` has one trap worth naming, because it cost a release: apt
+**right-aligns the priority in an 11-wide column**, so the indent shrinks as the number
+grows — `500` gets eight spaces, `1000` gets seven. A pin that beats the distro archive
+is four digits by definition, so an eight-space assumption breaks every pinned repo
+while looking fine on unpinned ones. Fixtures for this parser must be captured from a
+real machine, never retyped.
 
 ### Shape of the code
 
@@ -196,6 +212,21 @@ ASCII-armoured keyring via `Signed-By`. Mozilla's key is armoured despite its
 `.gpg` extension. Older apt would need `gpg --dearmor`; that is unsupported rather
 than worked around, so ops needs no gpg dependency.
 
+### Who owns the terminal
+
+**A spinner may only run while every subprocess is captured.** ops shows a spinner when it
+has silenced a subprocess, so the two must be decided together; a spinner repainting its
+row while apt writes to the same row shreds both.
+
+Configuring a repo is captured and therefore spins. The install that follows is not: apt's
+own download progress is worth more than a spinner, so `install.ts` emits a `streaming`
+stage before `mise.apply` (and before `mise use`), and whoever holds the spinner stands
+down. This is why `Stage` splits into `WorkStage` (something to label) and the bare
+`streaming` handover (nothing to label, only a row to release).
+
+The same rule already governed the `.deb` download's `\r` progress line, which is handed
+over to the spinner rather than overwritten by it.
+
 ## Out of scope
 
 `dnf`/`brew` repositories (rejected loudly, not implemented); `ops tool doctor`;
@@ -207,6 +238,11 @@ decision).
 
 ## Known gaps
 
+- apt does not record which repository an installed package came from — its source is
+  `/var/lib/dpkg/status`. The installed-version check therefore asks whether the repo
+  *still offers* that version. A version that has aged out of the repo reads as the
+  wrong origin, and ops suggests `--force`; safe, but a false alarm. `gh` on the
+  author's machine is a live example: installed 2.97.0, which the repo no longer lists.
 - A rotated signing key is not detected; delete `/etc/apt/keyrings/ops-<name>.asc`
   to refresh it.
 - `ops` never removes a repo it configured. Uninstalling a tool leaves the repo in

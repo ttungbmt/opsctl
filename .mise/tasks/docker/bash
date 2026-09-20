@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+#MISE description="Open bash in the test container (reuses a running one)"
+#MISE alias="bash"
+#MISE interactive=true
+exec "$(dirname "${BASH_SOURCE[0]}")/run" bash

@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+#MISE description="Stop the test container and discard its volumes"
+#MISE alias="reset"
+set -euo pipefail
+cd "${MISE_PROJECT_ROOT:-$(dirname "${BASH_SOURCE[0]}")/../../..}"
+exec docker compose down -v

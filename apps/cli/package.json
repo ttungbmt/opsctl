@@ -14,6 +14,11 @@
   ],
   "oclif": {
     "bin": "ops",
+    "topics": {
+      "tool": {
+        "description": "Install, configure and remove tools"
+      }
+    },
     "dirname": "ops",
     "commands": "./dist/commands",
     "topicSeparator": " ",

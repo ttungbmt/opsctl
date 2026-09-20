@@ -16,6 +16,24 @@ package:
     - wget
     - zsh
 
+# Third-party apt repositories a recipe can reference by name. For repo.<name> ops writes
+# /etc/apt/keyrings/ops-<name>.asc, /etc/apt/sources.list.d/ops-<name>.sources and
+# /etc/apt/preferences.d/ops-<name>.pref, runs `apt-get update`, then checks that apt's
+# candidate really comes from the repo before anything is installed.
+repo:
+  mozilla:
+    uri: https://packages.mozilla.org/apt
+    suite: mozilla
+    components: [main]
+    keyring: https://packages.mozilla.org/apt/repo-signing-key.gpg
+    # This repo publishes an internal path as its Release `Origin:`, so the pin matches the
+    # site hostname instead. Do not "correct" this to `release o=` -- that breaks the pin.
+    # 1000 beats the Ubuntu archive's 500, whose `firefox` is a 121 KB transitional package
+    # that installs the Firefox snap.
+    pin:
+      origin: packages.mozilla.org
+      priority: 1000
+
 # Named tool recipes. A plain name resolves to `package` before any heuristic
 # (system list, mise registry), so `ops tool install google-chrome` knows the real
 # package name. `prepare` runs only when the tool is missing: it makes the
@@ -64,3 +82,10 @@ tool:
       - name: browser binaries
         check: [agent-browser, doctor, --quick, --offline]
         run: [agent-browser, install, --with-deps]
+
+  firefox:
+    summary: Mozilla Firefox
+    # Mozilla publishes no standalone .deb, so there is nothing to `prepare`; the repo is what
+    # makes `apt:firefox` mean Mozilla's build rather than Ubuntu's snap shim.
+    package: apt:firefox
+    repo: mozilla

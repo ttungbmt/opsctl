@@ -2,6 +2,12 @@
 
 > Part of the [Ops CLI](../README.md) docs.
 
+> **Where we are:** partway into v0.2. Shipped so far: `ops tool install`,
+> `ops tool setup`, `ops tool uninstall`, the config layer, the process executor,
+> and the package/tool abstractions behind them — including tool recipes, vendor
+> apt repositories and `--purge`. Not yet built from v0.1: `ops version`,
+> `ops doctor`, `ops config get|set`.
+
 ## Development Roadmap
 
 ### v0.1 — Foundation
@@ -56,6 +62,8 @@ ops bootstrap developer
 ops tool install
 
 ops tool setup
+
+ops tool uninstall
 ```
 
 ---

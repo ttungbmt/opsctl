@@ -5,6 +5,7 @@ import {join} from 'node:path'
 
 import {OpsError} from '../core/errors.js'
 import type {AptRepo} from '../core/repo.js'
+import type {Stage} from '../core/stage.js'
 import type {RunOptions, Runner} from '../executor/exec.js'
 import {type Download, fetchDownload} from './deb.js'
 
@@ -25,16 +26,26 @@ export interface PolicyEntry {
 
 /** What `apt-cache policy <pkg>` reports. Absent candidate means apt has no version to install. */
 export interface Policy {
+  /** What apt would install. Absent when apt has no version for the package. */
   candidate?: string
+  /** What is on the machine right now. Absent when the package is not installed. */
+  installed?: string
   versions: PolicyEntry[]
 }
 
 /** "  Candidate: 1:1snap1-0ubuntu5"; "(none)" means there is nothing to install. */
 const CANDIDATE = /^ {2}Candidate: (.+)$/m
+/** "  Installed: 5.2.21-2ubuntu4"; "(none)" means the package is not installed. */
+const INSTALLED = /^ {2}Installed: (.+)$/m
 /** "     143.0 1000", or " *** 2.97.0 100" for the version currently installed. */
 const ENTRY = /^(?: {5}| \*\*\* )(\S+) (\d+)$/
-/** "        500 http://archive.ubuntu.com/ubuntu noble/main amd64 Packages", or a local path. */
-const SOURCE = /^ {8}(\d+) (.+)$/
+/**
+ * "        500 http://archive.ubuntu.com/ubuntu noble/main amd64 Packages", or a local path.
+ * The indent is NOT fixed: apt right-aligns the priority in an 11-wide column, so 500 gets
+ * eight spaces and 1000 gets seven. Hard-coding eight broke every pinned repo, since a pin
+ * that beats the distro archive's 500 is four digits.
+ */
+const SOURCE = /^ {2,}(\d+) (.+)$/
 
 /** deb822, so multi-value fields stay readable and `Signed-By` takes an explicit path. */
 export function sourcesStanza(repo: AptRepo): string {
@@ -66,7 +77,9 @@ export function pinStanza(repo: AptRepo): string | undefined {
  * localised. A package apt has never heard of prints nothing and still exits 0.
  */
 export function parsePolicy(stdout: string): Policy {
-  const candidate = CANDIDATE.exec(stdout)?.[1]
+  const version = (match: RegExpExecArray | null) => (match?.[1] === undefined || match[1] === '(none)' ? undefined : match[1])
+  const candidate = version(CANDIDATE.exec(stdout))
+  const installed = version(INSTALLED.exec(stdout))
   const versions: PolicyEntry[] = []
 
   for (const line of stdout.split('\n')) {
@@ -80,7 +93,11 @@ export function parsePolicy(stdout: string): Policy {
     if (source && versions.length > 0) versions.at(-1)!.sources.push(source[2])
   }
 
-  return {...(candidate === undefined || candidate === '(none)' ? {} : {candidate}), versions}
+  return {
+    ...(candidate === undefined ? {} : {candidate}),
+    ...(installed === undefined ? {} : {installed}),
+    versions,
+  }
 }
 
 /** A source line's hostname, or undefined when it is not a URL (e.g. /var/lib/dpkg/status). */
@@ -98,9 +115,9 @@ function hostOf(source: string): string | undefined {
  * Ubuntu, `apt:firefox` resolves to a transitional package that installs the snap, and
  * `mise bootstrap packages status` reports it as installed just like a real build.
  */
-export function servedBy(policy: Policy, host: string): boolean {
-  if (policy.candidate === undefined) return false
-  const entry = policy.versions.find((v) => v.version === policy.candidate)
+export function servedBy(policy: Policy, host: string, version = policy.candidate): boolean {
+  if (version === undefined) return false
+  const entry = policy.versions.find((v) => v.version === version)
   return entry?.sources.some((source) => hostOf(source) === host) ?? false
 }
 
@@ -111,6 +128,8 @@ export interface EnsureRepoOptions {
   nonInteractive: boolean
   /** Capture apt's output instead of streaming it (used with --json). */
   capture: boolean
+  /** Called as each stage begins, so a caller can drive a spinner. */
+  onStage?: (stage: Stage) => void
 }
 
 export interface EnsureRepoResult {
@@ -122,10 +141,11 @@ export interface EnsureRepoResult {
   candidate: string
 }
 
-/** Whether the repo really serves `pkg`, and what apt would install either way. */
+/** Whether the repo really serves the version that is on the machine (or would be). */
 export interface VerifyResult {
   ok: boolean
   candidate?: string
+  installed?: string
 }
 
 export interface AptRepoProvider {
@@ -202,7 +222,13 @@ export function createAptRepoProvider(
     async verify(repo, pkg) {
       checkRepo(repo)
       const result = await policy(pkg)
-      return {...(result.candidate === undefined ? {} : {candidate: result.candidate}), ok: servedBy(result, originOf(repo))}
+      // Judge what is on the machine, falling back to what apt would install when nothing is.
+      // `ensure` deliberately asks the other question -- see its call to servedBy.
+      return {
+        ...(result.candidate === undefined ? {} : {candidate: result.candidate}),
+        ...(result.installed === undefined ? {} : {installed: result.installed}),
+        ok: servedBy(result, originOf(repo), result.installed ?? result.candidate),
+      }
     },
 
     async ensure(repo, pkg, opts) {
@@ -246,10 +272,12 @@ export function createAptRepoProvider(
 
       const written: string[] = []
       if (key === undefined) {
+        opts.onStage?.('repo-key')
         await place((temp) => download(repo.keyring, temp), keyringPath(repo.name))
         written.push(keyringPath(repo.name))
       }
 
+      if (sources !== wantSources || pin !== wantPin) opts.onStage?.('repo-files')
       if (sources !== wantSources) {
         await place((temp) => writeFile(temp, wantSources, {mode: 0o600}), sourcesPath(repo.name))
         written.push(sourcesPath(repo.name))
@@ -266,12 +294,18 @@ export function createAptRepoProvider(
         written.push(pinPath(repo.name))
       }
 
-      const update = () => sudo(['apt-get', 'update'], 'apt-get update')
+      const update = () => {
+        opts.onStage?.('repo-update')
+        return sudo(['apt-get', 'update'], 'apt-get update')
+      }
       let updated = written.length > 0 || removedPin
       if (updated) await update()
 
-      // Verify. Skipping the update above is only safe if apt really resolves through the
-      // repo, so prove it -- and if the lists are simply missing, fetch them once and retry.
+      // Verify the CANDIDATE, not the installed version: this runs just before apt installs,
+      // including a --force reinstall over a build from somewhere else, which an
+      // installed-first check would reject before it could replace anything. `verify` asks
+      // the other question, for a package that is already there.
+      opts.onStage?.('repo-check')
       let result = await policy(pkg)
       if (!servedBy(result, host)) {
         if (!updated) {

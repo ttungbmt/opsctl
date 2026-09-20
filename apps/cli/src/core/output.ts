@@ -25,7 +25,8 @@ export function renderInstallResult(result: InstallResult, style: Style = plainS
   for (const p of result.packages) {
     const [symbol, text, paint] = LABELS[p.status]
     // Pad before painting: escape codes count towards .length and would skew the columns.
-    const detail = style.muted(`${text}${p.version ? ` (${p.version})` : ''}`)
+    const label = `${text}${p.version ? ` (${p.version})` : ''}${p.error ? `: ${p.error}` : ''}`
+    const detail = p.error ? style.fail(label) : style.muted(label)
     lines.push(`${style[paint](symbol)} ${p.spec.padEnd(width)}  ${detail}`)
   }
 
@@ -129,18 +130,39 @@ export function renderUninstallPlan(plan: UninstallPlan, style: Style = plainSty
 const MIB = 1024 * 1024
 /** Minimum gap between progress lines; the final one is always emitted. */
 const PROGRESS_INTERVAL_MS = 200
+/** The bar takes whatever the text leaves, within these bounds, so narrow terminals stay on one line. */
+const BAR_MIN = 10
+const BAR_MAX = 40
 
 function mib(bytes: number): string {
   return `${(bytes / MIB).toFixed(1)} MiB`
 }
 
+function duration(seconds: number, decimals = 0): string {
+  if (seconds < 60) return `${seconds.toFixed(decimals)}s`
+  const minutes = Math.floor(seconds / 60)
+  return `${minutes}m ${(seconds % 60).toFixed(0).padStart(2, '0')}s`
+}
+
+function bar(fraction: number, width: number): string {
+  const filled = Math.round(Math.min(1, Math.max(0, fraction)) * width)
+  return '█'.repeat(filled) + '░'.repeat(width - filled)
+}
+
 /**
  * A throttled progress reporter. Stateful (start time, last write), so it is a factory
- * rather than a pure render function; `now` is injected so tests need no real clock.
+ * rather than a pure render function; `now` and `columns` are injected so tests need
+ * neither a real clock nor a real terminal.
  */
-export function downloadProgress(write: (line: string) => void, now: () => number = Date.now): OnProgress {
+export function downloadProgress(
+  write: (line: string) => void,
+  now: () => number = Date.now,
+  columns: () => number = () => 80,
+): OnProgress {
   const started = now()
   let last = 0
+  // Decided once: a bar recomputed per tick jitters as the numbers beside it change width.
+  let width: number | undefined
 
   return (done, total) => {
     const at = now()
@@ -149,10 +171,34 @@ export function downloadProgress(write: (line: string) => void, now: () => numbe
     last = at
 
     const seconds = (at - started) / 1000
-    const speed = seconds > 0 ? `  ${(done / MIB / seconds).toFixed(1)} MB/s` : ''
-    const size = total === undefined ? mib(done) : `${mib(done)} / ${mib(total)}`
-    const percent = total === undefined ? '' : `${String(Math.floor((done / total) * 100)).padStart(3)}%  `
+    const perSecond = seconds > 0 ? done / seconds : 0
+    const speed = `${(perSecond / MIB).toFixed(1).padStart(5)} MB/s`
 
-    write(`${percent}${size}${speed}`)
+    // Without content-length there is nothing to fill a bar with, so keep a plain counter.
+    if (total === undefined) {
+      write(seconds > 0 ? `${mib(done)}  ${speed.trimStart()}` : mib(done))
+      return
+    }
+
+    const size = mib(total)
+    const eta = perSecond > 0 ? duration((total - done) / perSecond) : '—'
+    // Every field is padded, so the running line keeps one length and the bar holds still.
+    const detail = finished
+      ? `  ${size}  ${duration(seconds, 1)}`
+      : `  ${(done / MIB).toFixed(1).padStart(size.length - 4)}/${size}  ${speed}  eta ${eta.padStart(6)}`
+
+    const percent = `${String(Math.floor((done / total) * 100)).padStart(3)}%`
+    // -2: one for the space after the percentage, one so the line never touches the last
+    // column, which wraps the cursor on some terminals.
+    width ??= Math.min(BAR_MAX, columns() - percent.length - detail.length - 2)
+
+    // Shed detail rather than wrap onto a second line: the bar first, then speed and eta.
+    if (width >= BAR_MIN) {
+      write(`${percent} ${bar(done / total, width)}${detail}`)
+    } else if (percent.length + detail.length <= columns()) {
+      write(`${percent}${detail}`)
+    } else {
+      write(`${percent}  ${finished ? size : `${(done / MIB).toFixed(1)}/${size}`}`)
+    }
   }
 }

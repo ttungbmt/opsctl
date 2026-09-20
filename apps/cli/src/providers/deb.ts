@@ -8,10 +8,8 @@ import {pipeline} from 'node:stream/promises'
 import type {ReadableStream as NodeReadableStream} from 'node:stream/web'
 
 import {OpsError} from '../core/errors.js'
+import type {Stage} from '../core/stage.js'
 import type {RunOptions, Runner} from '../executor/exec.js'
-
-/** Which half of the work is running; the caller decides whether to show anything. */
-export type Stage = 'downloading' | 'installing'
 
 /** Reports bytes written so far; `total` is absent when the server sends no content-length. */
 export type OnProgress = (done: number, total?: number) => void

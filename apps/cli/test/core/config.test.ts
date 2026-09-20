@@ -76,7 +76,7 @@ describe('loadConfig', () => {
     expect(config.tool['agent-browser'].setup?.map((s) => s.name)).toEqual(['browser binaries'])
 
     // The shipped purge list must survive the real validation, not just the schema.
-    const paths = recipeIndex(config.tool, {home: '/home/t'}).purgeFor('google-chrome')
+    const paths = recipeIndex(config.tool, {home: '/home/t', repos: config.repo}).purgeFor('google-chrome')
     expect(paths).toContain('/etc/apt/sources.list.d/google-chrome.sources')
     expect(paths).toContain('/home/t/.config/google-chrome')
     expect(paths?.every((path) => path.startsWith('/'))).toBe(true)
@@ -157,6 +157,26 @@ describe('loadConfig', () => {
   it('keeps unknown keys on prepare', async () => {
     const config = await load('tool:\n  ab:\n    package: apt:ab\n    prepare:\n      deb: https://x/a.deb\n      sha256: abc\n')
     expect(config.tool.ab.prepare).toMatchObject({deb: 'https://x/a.deb', sha256: 'abc'})
+  })
+})
+
+describe('shipped defaults', () => {
+  it('ships the mozilla repo and a firefox recipe that references it', async () => {
+    const config = await loadConfig((path) => readFile(path, 'utf8'), '/nonexistent/ops.yaml', defaultsPath())
+
+    expect(config.repo.mozilla.uri).toBe('https://packages.mozilla.org/apt')
+    expect(config.repo.mozilla.suite).toBe('mozilla')
+    expect(config.repo.mozilla.components).toEqual(['main'])
+    expect(config.repo.mozilla.keyring).toMatch(/^https:\/\/packages\.mozilla\.org\//)
+    // Above the Ubuntu archive's 500, or apt keeps the transitional package that installs the snap.
+    expect(config.repo.mozilla.pin).toEqual({origin: 'packages.mozilla.org', priority: 1000})
+
+    expect(config.tool.firefox.package).toBe('apt:firefox')
+    expect(config.tool.firefox.repo).toBe('mozilla')
+    expect(config.tool.firefox.prepare).toBeUndefined()
+
+    // The shipped file must satisfy every cross-reference invariant.
+    expect(() => recipeIndex(config.tool, {repos: config.repo})).not.toThrow()
   })
 })
 

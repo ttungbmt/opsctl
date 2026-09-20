@@ -239,6 +239,10 @@ Environment variables
 CLI flags
 ```
 
+> Today only two of these layers exist: the built-in `config/defaults.yaml` is
+> overlaid by `~/.config/ops/config.yaml` (relocatable with `$OPS_CONFIG`).
+> Profiles, project-local config and per-key environment overrides are planned.
+
 Example:
 
 ```yaml

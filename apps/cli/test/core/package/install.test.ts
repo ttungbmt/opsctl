@@ -6,6 +6,33 @@ import type {ApplyOptions, MiseBootstrap, PackageState} from '../../../src/provi
 import type {InstallToolOptions, MiseTools, ToolState} from '../../../src/providers/mise-tools.js'
 import {recipeIndex} from '../../../src/core/tool/recipe.js'
 import type {DebInstaller, InstallDebOptions} from '../../../src/providers/deb.js'
+import type {AptRepo} from '../../../src/core/repo.js'
+import type {AptRepoProvider, EnsureRepoOptions, VerifyResult} from '../../../src/providers/apt-repo.js'
+
+class FakeRepos implements AptRepoProvider {
+  ensured: {repo: AptRepo; pkg: string; opts: EnsureRepoOptions}[] = []
+  verified: {repo: AptRepo; pkg: string}[] = []
+  /** What `verify` answers: apt resolves the package through the repo unless told otherwise. */
+  serves = true
+  candidate = '143.0'
+  failWith: Error | undefined
+
+  describe(repo: AptRepo, pkg: string) {
+    return [`configure repo ${repo.name}`, `apt-cache policy ${pkg}`]
+  }
+
+  async verify(repo: AptRepo, pkg: string): Promise<VerifyResult> {
+    this.verified.push({pkg, repo})
+    return {candidate: this.candidate, ok: this.serves}
+  }
+
+  async ensure(repo: AptRepo, pkg: string, opts: EnsureRepoOptions) {
+    this.ensured.push({opts, pkg, repo})
+    if (this.failWith) throw this.failWith
+    opts.onStage?.('repo-update')
+    return {candidate: this.candidate, updated: true, written: []}
+  }
+}
 
 class FakeDeb implements DebInstaller {
   installs: {url: string; opts: InstallDebOptions}[] = []
@@ -97,8 +124,10 @@ function setup(overrides: Partial<InstallDeps> = {}) {
   const mise = new FakeMise()
   const tools = new FakeTools()
   const deb = new FakeDeb()
+  const repos = new FakeRepos()
   const deps: InstallDeps = {
     deb,
+    repos,
     detectManager: async () => 'apt',
     isTTY: true,
     mise,
@@ -108,12 +137,32 @@ function setup(overrides: Partial<InstallDeps> = {}) {
     tools,
     ...overrides,
   }
-  return {deb, deps, mise, tools}
+  return {deb, deps, mise, repos, tools}
 }
 
 const CHROME = {'google-chrome': {package: 'apt:google-chrome-stable', prepare: {deb: 'https://example.test/chrome.deb'}}}
 
-const opts = (o: Partial<InstallOptions>): InstallOptions => ({dryRun: false, json: false, nonInteractive: false, packages: [], yes: false, ...o})
+const opts = (o: Partial<InstallOptions>): InstallOptions => ({
+  dryRun: false,
+  force: false,
+  json: false,
+  nonInteractive: false,
+  packages: [],
+  yes: false,
+  ...o,
+})
+
+const MOZILLA = {
+  mozilla: {
+    uri: 'https://packages.mozilla.org/apt',
+    suite: 'mozilla',
+    components: ['main'],
+    keyring: 'https://packages.mozilla.org/apt/repo-signing-key.gpg',
+    pin: {origin: 'packages.mozilla.org', priority: 1000},
+  },
+}
+const FIREFOX = {firefox: {package: 'apt:firefox', repo: 'mozilla'}}
+const firefoxRecipes = () => recipeIndex(FIREFOX, {repos: MOZILLA})
 
 async function codeOf(promise: Promise<unknown>) {
   const error = await promise.then(() => undefined, (e: unknown) => e)
@@ -360,5 +409,139 @@ describe('installPackages', () => {
     expect(mise.calls).toEqual(['dryRun', 'status'])
     expect(result.commands).toEqual(['would use fastfetch', 'would install apt:sl'])
     expect(result.packages.map((p) => p.status)).toEqual(['would-install', 'would-install'])
+  })
+})
+
+describe('installPackages with a repo-backed recipe', () => {
+  it('configures the repo, then lets the package manager install the package', async () => {
+    const {deps, deb, mise, repos} = setup({recipes: firefoxRecipes()})
+    const result = await installPackages(opts({packages: ['firefox'], yes: true}), deps)
+
+    expect(repos.ensured).toHaveLength(1)
+    expect(repos.ensured[0]).toMatchObject({opts: {capture: false, nonInteractive: false}, pkg: 'firefox', repo: {...MOZILLA.mozilla, name: 'mozilla'}})
+    // Unlike a prepare step, a repo does not install anything itself.
+    expect(deb.installs).toEqual([])
+    expect(mise.applied).toEqual([{opts: {capture: false, nonInteractive: false, yes: true}, specs: ['apt:firefox']}])
+    expect(result.packages).toEqual([{spec: 'apt:firefox', status: 'installed', version: '1.0'}])
+  })
+
+  it('leaves a package already installed from the repo alone', async () => {
+    const {deps, mise, repos} = setup({recipes: firefoxRecipes()})
+    mise.installed.set('apt:firefox', '143.0')
+    const result = await installPackages(opts({packages: ['firefox'], yes: true}), deps)
+
+    // Verified, not assumed: "installed" alone cannot tell the repo build from the shim.
+    expect(repos.verified).toEqual([{pkg: 'firefox', repo: {...MOZILLA.mozilla, name: 'mozilla'}}])
+    expect(repos.ensured).toEqual([])
+    expect(mise.applied).toEqual([])
+    expect(result.packages).toEqual([{spec: 'apt:firefox', status: 'already-installed', version: '143.0'}])
+  })
+
+  // The Ubuntu `firefox` package is a 121 KB shim that installs the snap, and mise reports
+  // it as installed. Saying "already installed" here would be a lie.
+  it('fails instead of claiming success when the installed package came from elsewhere', async () => {
+    const {deps, mise, repos} = setup({recipes: firefoxRecipes()})
+    mise.installed.set('apt:firefox', '1:1snap1-0ubuntu5')
+    repos.serves = false
+    repos.candidate = '1:1snap1-0ubuntu5'
+    const result = await installPackages(opts({packages: ['firefox'], yes: true}), deps)
+
+    expect(result.success).toBe(false)
+    expect(result.packages[0]).toMatchObject({spec: 'apt:firefox', status: 'failed'})
+    expect(result.packages[0]!.error).toContain('packages.mozilla.org')
+    expect(result.packages[0]!.error).toContain('--force')
+    expect(repos.ensured).toEqual([])
+    expect(mise.applied).toEqual([])
+  })
+
+  it('switches a wrong-origin package to the repo build with --force', async () => {
+    const {deps, mise, repos} = setup({recipes: firefoxRecipes()})
+    mise.installed.set('apt:firefox', '1:1snap1-0ubuntu5')
+    repos.serves = false
+    const result = await installPackages(opts({force: true, packages: ['firefox'], yes: true}), deps)
+
+    expect(repos.ensured).toHaveLength(1)
+    expect(mise.applied).toEqual([{opts: {capture: false, nonInteractive: false, yes: true}, specs: ['apt:firefox']}])
+    expect(result.success).toBe(true)
+  })
+
+  it('forwards repo stages naming the repo, not the package spec', async () => {
+    const seen: [string, string][] = []
+    const {deps} = setup({onStage: (stage, subject) => seen.push([stage, subject]), recipes: firefoxRecipes()})
+    await installPackages(opts({packages: ['firefox'], yes: true}), deps)
+    // Repo work is named after the repo, not the spec, then the terminal goes to apt.
+    expect(seen).toEqual([
+      ['repo-update', 'repo.mozilla'],
+      ['streaming', 'apt:firefox'],
+    ])
+  })
+
+  it('releases the terminal before the package manager streams its own output', async () => {
+    const seen: string[] = []
+    const {deps, mise} = setup({onStage: (stage) => seen.push(stage), recipes: firefoxRecipes()})
+    const apply = mise.apply.bind(mise)
+    mise.apply = async (specs, o) => {
+      seen.push('apply')
+      return apply(specs, o)
+    }
+
+    await installPackages(opts({packages: ['firefox'], yes: true}), deps)
+    expect(seen).toEqual(['repo-update', 'streaming', 'apply'])
+  })
+
+  it('installs nothing when configuring the repo fails', async () => {
+    const {deps, mise, repos} = setup({recipes: firefoxRecipes()})
+    repos.failWith = new OpsError('REPO_PIN_UNSATISFIED', 'candidate is not from packages.mozilla.org')
+    expect(await codeOf(installPackages(opts({packages: ['firefox'], yes: true}), deps))).toBe('REPO_PIN_UNSATISFIED')
+    expect(mise.calls).not.toContain('apply')
+  })
+
+  it('configures the repo once and applies every system package together', async () => {
+    const {deps, mise, repos} = setup({recipes: firefoxRecipes()})
+    await installPackages(opts({packages: ['firefox', 'sl'], yes: true}), deps)
+
+    expect(repos.ensured).toHaveLength(1)
+    expect(mise.applied).toEqual([{opts: {capture: false, nonInteractive: false, yes: true}, specs: ['apt:firefox', 'apt:sl']}])
+  })
+
+  it('forwards capture and non-interactive to the repo provider', async () => {
+    const {deps, repos} = setup({recipes: firefoxRecipes()})
+    await installPackages(opts({json: true, nonInteractive: true, packages: ['firefox'], yes: true}), deps)
+    expect(repos.ensured[0]!.opts).toMatchObject({capture: true, nonInteractive: true})
+  })
+
+  // A repo writes deb822 files under /etc/apt; there is no dnf equivalent yet. Fail loudly
+  // rather than configure nothing and let the install fail somewhere confusing.
+  it('refuses a repo-backed recipe whose package is not an apt package', async () => {
+    const {deps, repos} = setup({
+      recipes: recipeIndex({firefox: {package: 'dnf:firefox', repo: 'mozilla'}}, {repos: MOZILLA}),
+    })
+    expect(await codeOf(installPackages(opts({packages: ['firefox'], yes: true}), deps))).toBe('UNSUPPORTED_PLATFORM')
+    expect(repos.ensured).toEqual([])
+  })
+
+  it('describes the repo before the install, and still lets mise describe the package', async () => {
+    const {deps, repos} = setup({recipes: firefoxRecipes()})
+    const result = await installPackages(opts({dryRun: true, packages: ['firefox', 'sl']}), deps)
+
+    expect(result.commands).toEqual(['configure repo mozilla', 'apt-cache policy firefox', 'would install apt:firefox', 'would install apt:sl'])
+    expect(repos.ensured).toEqual([])
+    expect(repos.verified).toEqual([])
+  })
+})
+
+describe('installPackages terminal handover for mise tools', () => {
+  it('releases the terminal before `mise use` streams its own output', async () => {
+    const seen: string[] = []
+    const {deps, tools} = setup({onStage: (stage) => seen.push(stage)})
+    tools.registry.add('fastfetch')
+    const install = tools.install.bind(tools)
+    tools.install = async (names, o) => {
+      seen.push('install')
+      return install(names, o)
+    }
+
+    await installPackages(opts({packages: ['fastfetch'], yes: true}), deps)
+    expect(seen).toEqual(['streaming', 'install'])
   })
 })

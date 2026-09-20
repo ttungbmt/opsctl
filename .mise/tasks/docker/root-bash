@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+#MISE description="Open bash as root in the test container"
+#MISE alias="root-bash"
+#MISE interactive=true
+# Goes through sudo rather than `docker compose exec -u root`, so this exercises
+# the same passwordless-sudo path the CLI itself uses to escalate.
+exec "$(dirname "${BASH_SOURCE[0]}")/run" sudo bash

@@ -46,7 +46,7 @@ export default class ToolSetup extends Command {
         onPlan: (pending) => {
           if (!this.jsonEnabled()) for (const line of renderSetupPlan(pending)) this.log(line)
         },
-        recipes: recipeIndex(config.tool),
+        recipes: recipeIndex(config.tool, {repos: config.repo}),
         runner: execaRunner,
       },
     )

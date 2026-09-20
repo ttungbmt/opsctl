@@ -3,6 +3,7 @@ import {access, readFile, writeFile} from 'node:fs/promises'
 import {describe, expect, it} from 'vitest'
 import {OpsError} from '../../src/core/errors.js'
 import type {AptRepo} from '../../src/core/repo.js'
+import type {Stage} from '../../src/core/stage.js'
 import type {RunOptions, RunResult} from '../../src/executor/exec.js'
 import {
   createAptRepoProvider,
@@ -58,15 +59,50 @@ const INSTALLED = `gh:
         500 http://security.ubuntu.com/ubuntu noble-security/universe amd64 Packages
 `
 
-/** What Mozilla's repo looks like once configured and pinned above the archive. */
+/**
+ * Real `LC_ALL=C apt-cache policy firefox` once the repo is configured and pinned.
+ * Captured verbatim -- do not retype it. The 1000 rows are indented SEVEN spaces while
+ * the 500 row gets eight: apt right-aligns the priority in an 11-wide column, so the
+ * indent shrinks as the number grows. An earlier hand-written version of this fixture
+ * used eight spaces throughout and hid a parser bug that broke every pinned repo.
+ */
 const MOZILLA_WINS = `firefox:
   Installed: (none)
-  Candidate: 143.0
+  Candidate: 156.0~build1
   Version table:
-     143.0 1000
-        1000 https://packages.mozilla.org/apt mozilla/main amd64 Packages
      1:1snap1-0ubuntu5 500
         500 http://archive.ubuntu.com/ubuntu noble/main amd64 Packages
+     156.0~build1 1000
+       1000 https://packages.mozilla.org/apt mozilla/main amd64 Packages
+     155.0.1~build1 1000
+       1000 https://packages.mozilla.org/apt mozilla/main amd64 Packages
+     155.0~build1 1000
+       1000 https://packages.mozilla.org/apt mozilla/main amd64 Packages
+`
+
+/**
+ * Real `apt-cache policy bash`: installed from the distro archive. apt lists BOTH the repo
+ * that still offers the version and /var/lib/dpkg/status. This is the shape a machine
+ * holding Ubuntu's firefox shim would have.
+ */
+const FROM_ARCHIVE = `bash:
+  Installed: 5.2.21-2ubuntu4
+  Candidate: 5.2.21-2ubuntu4
+  Version table:
+ *** 5.2.21-2ubuntu4 500
+        500 http://archive.ubuntu.com/ubuntu noble/main amd64 Packages
+        100 /var/lib/dpkg/status
+`
+
+/** Real `apt-cache policy tailscale`: installed from a third-party repo that still offers it. */
+const FROM_REPO = `tailscale:
+  Installed: 1.102.3
+  Candidate: 1.102.4
+  Version table:
+     1.102.4 500
+        500 https://pkgs.tailscale.com/stable/ubuntu noble/main amd64 Packages
+ *** 1.102.3 500
+        500 https://pkgs.tailscale.com/stable/ubuntu noble/main amd64 Packages
 `
 
 describe('sourcesStanza', () => {
@@ -125,6 +161,29 @@ describe('parsePolicy', () => {
     expect(policy.versions.map((v) => v.version)).toEqual(['2.101.0', '2.97.0', '2.45.0-1ubuntu0.3'])
     expect(policy.versions[1]).toEqual({version: '2.97.0', priority: 100, sources: ['/var/lib/dpkg/status']})
     expect(policy.versions[2].sources).toHaveLength(2)
+  })
+
+  // apt right-aligns the priority in an 11-wide column: 500 gets eight spaces, 1000 gets
+  // seven. Hard-coding eight silently dropped every source line of a pinned repo.
+  it('attaches source lines whose priority is four digits, which any real pin produces', () => {
+    const mozilla = parsePolicy(MOZILLA_WINS).versions.find((v) => v.version === '156.0~build1')
+    expect(mozilla).toEqual({
+      version: '156.0~build1',
+      priority: 1000,
+      sources: ['https://packages.mozilla.org/apt mozilla/main amd64 Packages'],
+    })
+  })
+
+  it('reads the installed version, and treats (none) as nothing installed', () => {
+    expect(parsePolicy(FROM_ARCHIVE).installed).toBe('5.2.21-2ubuntu4')
+    expect(parsePolicy(SHIM).installed).toBeUndefined()
+  })
+
+  it('lists every source for a version that is both installed and still offered', () => {
+    expect(parsePolicy(FROM_ARCHIVE).versions[0]!.sources).toEqual([
+      'http://archive.ubuntu.com/ubuntu noble/main amd64 Packages',
+      '/var/lib/dpkg/status',
+    ])
   })
 
   it('has no candidate when apt knows the package but has no version for it', () => {
@@ -242,7 +301,7 @@ describe('createAptRepoProvider.ensure', () => {
     expect(result).toEqual({
       written: [keyringPath('mozilla'), sourcesPath('mozilla'), pinPath('mozilla')],
       updated: true,
-      candidate: '143.0',
+      candidate: '156.0~build1',
     })
     expect(runner.placed.map((p) => p.dest)).toEqual([keyringPath('mozilla'), sourcesPath('mozilla'), pinPath('mozilla')])
     expect(runner.placed[1].text).toBe(sourcesStanza(MOZILLA))
@@ -275,7 +334,7 @@ describe('createAptRepoProvider.ensure', () => {
     const {download, urls} = fakeDownload()
     const result = await createAptRepoProvider(runner, download, fakeFiles(CONFIGURED)).ensure(MOZILLA, 'firefox', OPTS)
 
-    expect(result).toEqual({written: [], updated: false, candidate: '143.0'})
+    expect(result).toEqual({written: [], updated: false, candidate: '156.0~build1'})
     expect(urls).toEqual([])
     expect(runner.calls).toEqual([
       {cmd: 'apt-cache', args: ['policy', 'firefox'], opts: {env: {LC_ALL: 'C'}, stdin: 'ignore', stdout: 'capture'}},
@@ -299,7 +358,7 @@ describe('createAptRepoProvider.ensure', () => {
       .on('apt-cache policy firefox', {stdout: SHIM}, {stdout: MOZILLA_WINS})
     const result = await createAptRepoProvider(runner, fakeDownload().download, fakeFiles(CONFIGURED)).ensure(MOZILLA, 'firefox', OPTS)
 
-    expect(result).toEqual({written: [], updated: true, candidate: '143.0'})
+    expect(result).toEqual({written: [], updated: true, candidate: '156.0~build1'})
     expect(runner.calls.filter((c) => c.args[0] === 'apt-get')).toHaveLength(1)
   })
 
@@ -336,6 +395,40 @@ describe('createAptRepoProvider.ensure', () => {
     for (const temp of runner.temps) expect(await exists(temp)).toBe(false)
   })
 
+  // The counterpart to verify's "judges what is installed": ensure runs just before apt
+  // installs, so it must judge the candidate. On this very output verify says not-ok and
+  // ensure says fine -- which is what makes `--force` able to replace a wrong-origin build.
+  it('accepts a candidate from the repo even when the installed version is not', async () => {
+    const runner = new CapturingRunner().on('sudo install').on('sudo apt-get update').on('apt-cache policy gh', {stdout: INSTALLED})
+    const repo = {...MOZILLA, name: 'github', pin: {origin: 'cli.github.com', priority: 1000}}
+    const provider = createAptRepoProvider(runner, fakeDownload().download, fakeFiles())
+
+    await expect(provider.ensure(repo, 'gh', OPTS)).resolves.toMatchObject({candidate: '2.101.0'})
+    expect((await provider.verify(repo, 'gh')).ok).toBe(false)
+  })
+
+  // apt-get update is the slow step and its output is captured when a spinner is running,
+  // so without these the command sits silent for seconds with no sign it is alive.
+  it('announces each stage so the caller can show what is happening', async () => {
+    const runner = ready()
+    const stages: Stage[] = []
+    await createAptRepoProvider(runner, fakeDownload().download, fakeFiles()).ensure(MOZILLA, 'firefox', {
+      ...OPTS,
+      onStage: (stage) => stages.push(stage),
+    })
+    expect(stages).toEqual(['repo-key', 'repo-files', 'repo-update', 'repo-check'])
+  })
+
+  it('announces only the check when the repo is already configured', async () => {
+    const runner = ready()
+    const stages: Stage[] = []
+    await createAptRepoProvider(runner, fakeDownload().download, fakeFiles(CONFIGURED)).ensure(MOZILLA, 'firefox', {
+      ...OPTS,
+      onStage: (stage) => stages.push(stage),
+    })
+    expect(stages).toEqual(['repo-check'])
+  })
+
   it('rejects a non-https keyring before any I/O', async () => {
     const runner = ready()
     const {download, urls} = fakeDownload()
@@ -369,8 +462,34 @@ describe('createAptRepoProvider.verify', () => {
     const runner = new FakeRunner().on('apt-cache policy firefox', {stdout: MOZILLA_WINS})
     const result = await createAptRepoProvider(runner, fakeDownload().download, fakeFiles()).verify(MOZILLA, 'firefox')
 
-    expect(result).toEqual({ok: true, candidate: '143.0'})
+    expect(result).toEqual({ok: true, candidate: '156.0~build1'})
     expect(runner.calls.every((c) => c.cmd === 'apt-cache')).toBe(true)
+  })
+
+  // The whole point of this provider: "installed" cannot be trusted on its own, and neither
+  // can the candidate. gh is installed at 2.97.0, which the repo no longer offers, while the
+  // candidate 2.101.0 does come from the repo -- judging the candidate would say all is well.
+  it('judges what is installed, not what apt would install next', async () => {
+    const runner = new FakeRunner().on('apt-cache policy gh', {stdout: INSTALLED})
+    const repo = {...MOZILLA, name: 'github', pin: {origin: 'cli.github.com', priority: 1000}}
+    const result = await createAptRepoProvider(runner, fakeDownload().download, fakeFiles()).verify(repo, 'gh')
+
+    expect(result).toEqual({ok: false, candidate: '2.101.0', installed: '2.97.0'})
+  })
+
+  it('is ok when the installed version is one the repo serves', async () => {
+    const runner = new FakeRunner().on('apt-cache policy tailscale', {stdout: FROM_REPO})
+    const repo = {...MOZILLA, name: 'tailscale', pin: {origin: 'pkgs.tailscale.com', priority: 1000}}
+    const result = await createAptRepoProvider(runner, fakeDownload().download, fakeFiles()).verify(repo, 'tailscale')
+
+    expect(result).toEqual({ok: true, candidate: '1.102.4', installed: '1.102.3'})
+  })
+
+  // A machine holding Ubuntu's firefox shim: installed from the archive, not from Mozilla.
+  it('is not ok when the installed version comes from the distro archive', async () => {
+    const runner = new FakeRunner().on('apt-cache policy firefox', {stdout: FROM_ARCHIVE})
+    const result = await createAptRepoProvider(runner, fakeDownload().download, fakeFiles()).verify(MOZILLA, 'firefox')
+    expect(result.ok).toBe(false)
   })
 
   it('reports no candidate for a package apt has never heard of', async () => {

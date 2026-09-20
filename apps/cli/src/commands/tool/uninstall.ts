@@ -60,7 +60,7 @@ export default class ToolUninstall extends Command {
           if (!this.jsonEnabled()) for (const line of renderUninstallPlan(plan, style)) this.log(line)
         },
         paths: createPathRemover(execaRunner),
-        recipes: recipeIndex(config.tool),
+        recipes: recipeIndex(config.tool, {repos: config.repo}),
         sudoReady: () => sudoReady(execaRunner),
         system: createSystemPackages(execaRunner, await detectSystemManager()),
         systemPreferred: new Set(config.package.system),

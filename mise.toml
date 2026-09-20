@@ -1,3 +1,18 @@
 [tools]
 node = "lts"
 pnpm = "12"
+
+# Which service in docker-compose.yml the `docker:*` tasks run commands in.
+# Our own variable, not one docker compose reads. The tasks fall back to the
+# only service in the compose file, so this line is what makes them explicit
+# rather than what makes them work.
+[env]
+COMPOSE_SERVICE = "ops"
+
+# `mise run` is long, and worse: `mise up` silently means `mise upgrade`, never
+# the docker:up task. `mr up` expands to `mise run up`, which can only be a task.
+# Needs `mise activate` in the shell; mise sets the alias on entering this
+# directory and removes it on leaving. Interactive shells only -- scripts, tasks
+# and CI have to spell out `mise run`.
+[shell_alias]
+mr = "mise run"

@@ -1,6 +1,9 @@
 import {describe, expect, it} from 'vitest'
 import {OpsError} from '../../../src/core/errors.js'
-import {recipeIndex} from '../../../src/core/tool/recipe.js'
+import {type Recipe, recipeIndex} from '../../../src/core/tool/recipe.js'
+
+/** YAML can carry keys the Recipe type does not have; RecipeSchema is loose and keeps them. */
+const fromYaml = (value: unknown) => value as Record<string, Recipe>
 
 const CHROME = {package: 'apt:google-chrome-stable', prepare: {deb: 'https://example.test/chrome.deb'}}
 const STEP = {name: 'browser binaries', check: ['ab', 'doctor'], run: ['ab', 'install']}
@@ -155,7 +158,7 @@ describe('recipeIndex repos', () => {
 
   // This is what catches a misspelled `repo:` key: the repo it meant becomes unreferenced.
   it('rejects a repo that no recipe references', () => {
-    const error = ctxError({firefox: {...FIREFOX, repoo: 'mozilla', repo: undefined}}, {repos: {mozilla: MOZILLA}})
+    const error = ctxError(fromYaml({firefox: {package: 'apt:firefox', repoo: 'mozilla'}}), {repos: {mozilla: MOZILLA}})
     expect(error.code).toBe('CONFIG_INVALID')
     expect(error.message).toContain('repo.mozilla')
   })

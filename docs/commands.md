@@ -184,6 +184,29 @@ ops tool install brew:jq
 ops tool install mise:aqua:BurntSushi/ripgrep
 ```
 
+Which plain names count as "base system packages" is the `package.system` list.
+It ships with shells and build basics — `bash`, `build-essential`,
+`ca-certificates`, `curl`, `fish`, `git`, `openssh-client`, `tmux`, `unzip`,
+`wget`, `zsh` — and those go to apt/dnf even when the mise registry also has
+them, because a login shell or a system library belongs to the OS.
+
+Override it in `~/.config/ops/config.yaml` two ways. A list **replaces** the
+built-in one:
+
+```yaml
+package:
+  system: [git, curl, zsh]
+```
+
+An `add`/`remove` map **adjusts** it, which is usually what you want:
+
+```yaml
+package:
+  system:
+    add: [ripgrep]      # force apt/dnf even though mise has it
+    remove: [tmux]      # let mise provide it instead
+```
+
 ### Recipes
 
 Some tools are not installable by name: `google-chrome` is neither a mise tool
@@ -206,6 +229,42 @@ A recipe name resolves to its package ahead of every heuristic, so
 `ops tool install google-chrome` works on a fresh machine. `prepare` runs only when the
 tool is missing, must use `https`, and is shown by `--dry-run` before anything is
 downloaded.
+
+#### Repos
+
+`prepare` suits a vendor that ships a standalone `.deb`. When it ships a
+repository instead, the recipe names a **repo** and ops configures apt before
+installing:
+
+```yaml
+repo:
+  mozilla:
+    uri: https://packages.mozilla.org/apt
+    suite: mozilla
+    components: [main]
+    keyring: https://packages.mozilla.org/apt/repo-signing-key.gpg
+    pin: {origin: packages.mozilla.org, priority: 1000}
+
+tool:
+  firefox:
+    package: apt:firefox
+    repo: mozilla
+```
+
+ops writes `/etc/apt/{keyrings,sources.list.d,preferences.d}/ops-<name>.*`, runs
+`apt-get update`, then proves with `apt-cache policy` that apt's candidate really
+comes from that repo. The pin is what makes this work: Ubuntu's own `firefox`
+package is a 121 KB shim that installs the snap, and without a priority above 500
+apt would prefer it and still report success.
+
+`prepare` and `repo` are opposites and mutually exclusive — `prepare` installs
+the tool and stops, `repo` only makes the package reachable so the normal install
+path continues. A package already installed from the wrong origin is reported as
+`failed`, not `already-installed`; **`--force`** reinstalls it through the
+recipe's repo.
+
+Repos are apt-only. A recipe naming one on a dnf system fails with
+`UNSUPPORTED_PLATFORM` rather than installing the wrong thing.
 
 ---
 

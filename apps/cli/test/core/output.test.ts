@@ -11,6 +11,28 @@ import {
 import {ansiStyle, plainStyle} from '../../src/core/style.js'
 
 describe('renderInstallResult', () => {
+  it('spells out why a package failed, so a wrong-origin build is actionable', () => {
+    expect(
+      renderInstallResult({
+        action: 'install',
+        dryRun: false,
+        managers: ['apt'],
+        packages: [
+          {
+            spec: 'apt:firefox',
+            status: 'failed',
+            version: '1:1snap1-0ubuntu5',
+            error: 'installed 1:1snap1-0ubuntu5 is not from packages.mozilla.org; re-run with --force to switch',
+          },
+        ],
+        success: false,
+      }),
+    ).toEqual([
+      'Installed with: apt',
+      '✗ apt:firefox  failed (1:1snap1-0ubuntu5): installed 1:1snap1-0ubuntu5 is not from packages.mozilla.org; re-run with --force to switch',
+    ])
+  })
+
   it('renders one aligned line per package', () => {
     expect(
       renderInstallResult({
@@ -98,10 +120,10 @@ describe('renderSetupPlan', () => {
 
 describe('downloadProgress', () => {
   /** A clock the test advances by hand, plus the lines written so far. */
-  function reporter() {
+  function reporter(columns = 80) {
     const lines: string[] = []
     let clock = 1000
-    const report = downloadProgress((line) => lines.push(line), () => clock)
+    const report = downloadProgress((line) => lines.push(line), () => clock, () => columns)
     return {advance: (ms: number) => (clock += ms), lines, report}
   }
 
@@ -126,11 +148,66 @@ describe('downloadProgress', () => {
     expect(r.lines[1]).toContain('100%')
   })
 
-  it('shows percent, size and speed', () => {
+  it('shows a bar, percent, size, speed and eta', () => {
     const r = reporter()
-    r.advance(2000) // 2s elapsed
+    r.advance(2000) // 2s elapsed, so 25 MB/s and 6s left
     r.report(50 * 1024 * 1024, 200 * 1024 * 1024)
-    expect(r.lines[0]).toBe(' 25%  50.0 MiB / 200.0 MiB  25.0 MB/s')
+    expect(r.lines[0]).toContain(' 25% ')
+    expect(r.lines[0]).toContain('50.0/200.0 MiB')
+    expect(r.lines[0]).toContain('25.0 MB/s')
+    expect(r.lines[0]).toContain('eta     6s')
+    expect(r.lines[0]).toMatch(/█+░+/)
+  })
+
+  it('reports elapsed time instead of eta on the final line', () => {
+    const r = reporter()
+    r.advance(21_700)
+    r.report(100 * 1024 * 1024, 100 * 1024 * 1024)
+    expect(r.lines[0]).toContain('100.0 MiB  21.7s')
+    expect(r.lines[0]).not.toContain('eta')
+    expect(r.lines[0]).toMatch(/█+(?!░)/)
+  })
+
+  it('holds the bar width steady as the numbers beside it change', () => {
+    const r = reporter()
+    const widths = new Set<number>()
+    for (const [ms, mib] of [[1000, 10], [2000, 40], [8000, 90], [9000, 100]]) {
+      r.advance(ms)
+      r.report(mib * 1024 * 1024, 100 * 1024 * 1024)
+      widths.add((r.lines.at(-1)?.match(/[█░]/g) ?? []).length)
+    }
+    // A bar recomputed per tick jitters as the speed and eta fields change width.
+    expect(widths.size).toBe(1)
+  })
+
+  it('caps the bar so a wide terminal does not get a giant one', () => {
+    const r = reporter(400)
+    r.advance(1000)
+    r.report(1 * 1024 * 1024, 100 * 1024 * 1024)
+    expect((r.lines[0].match(/[█░]/g) ?? []).length).toBe(40)
+  })
+
+  it('never writes past the terminal width', () => {
+    for (const columns of [40, 60, 80, 120]) {
+      const r = reporter(columns)
+      r.advance(2000)
+      r.report(50 * 1024 * 1024, 200 * 1024 * 1024)
+      expect(r.lines[0].length).toBeLessThan(columns)
+    }
+  })
+
+  it('drops the bar, then the speed and eta, as the terminal narrows', () => {
+    const wide = reporter(80)
+    wide.advance(2000)
+    wide.report(50 * 1024 * 1024, 200 * 1024 * 1024)
+    expect(wide.lines[0]).toMatch(/[█░]/)
+
+    const narrow = reporter(40)
+    narrow.advance(2000)
+    narrow.report(50 * 1024 * 1024, 200 * 1024 * 1024)
+    expect(narrow.lines[0]).not.toMatch(/[█░]/)
+    expect(narrow.lines[0]).not.toContain('eta')
+    expect(narrow.lines[0]).toContain('50.0/200.0 MiB')
   })
 
   it('drops the percentage when the server sent no content-length', () => {

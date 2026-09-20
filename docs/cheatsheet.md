@@ -264,6 +264,33 @@ tool:
 A recipe wins over every heuristic below an explicit prefix. `prepare` runs only
 when the tool is missing, must be `https`, and shows up in `--dry-run`.
 
+When the vendor ships no standalone `.deb`, the recipe names a **repo** instead.
+`prepare` and `repo` are opposites and a recipe may carry only one: `prepare`
+installs the tool itself and stops; `repo` only makes the package reachable, and
+the package manager still does the install.
+
+```yaml
+repo:
+  mozilla:
+    uri: https://packages.mozilla.org/apt
+    suite: mozilla
+    components: [main]
+    keyring: https://packages.mozilla.org/apt/repo-signing-key.gpg
+    pin: {origin: packages.mozilla.org, priority: 1000}
+
+tool:
+  firefox:
+    package: apt:firefox
+    repo: mozilla
+```
+
+`Pin: origin` matches the **site hostname**, not the Release file's `Origin:`
+field. A pin above 500 is what stops apt preferring the distro's own package --
+Ubuntu's `firefox` is a 121 KB shim that installs the snap, and it would report
+as installed. ops therefore checks `apt-cache policy` before claiming success, on
+the install path *and* for a package that is already there; a build from the
+wrong origin is `failed`, and `--force` switches it.
+
 A recipe also carries `setup` — the steps that configure the tool once it exists
 (§9). A recipe may have either half: `google-chrome` needs `prepare` and no
 `setup`; `agent-browser` installs straight from the mise registry and needs only
@@ -771,6 +798,10 @@ environment
   ↓
 CLI flags
 ```
+
+> Implemented today: defaults (`config/defaults.yaml`) → global config
+> (`~/.config/ops/config.yaml`, relocatable with `$OPS_CONFIG`). Profiles,
+> project config and per-key environment overrides are planned.
 
 ---
 

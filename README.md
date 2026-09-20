@@ -20,7 +20,10 @@ ops docker cleanup
 ops workflow run backup
 ```
 
-> **Status:** early scaffolding. Only `ops --version` works so far — everything below describes the planned design. See the [roadmap](docs/roadmap.md).
+> **Status:** early scaffolding. What works today is `ops --version` and the `ops tool` group —
+> [`install`](docs/commands.md#how-a-tool-gets-installed), [`setup`](docs/commands.md#how-setup-works) and
+> [`uninstall`](docs/commands.md#removing-a-tool). Everything else above and below describes the planned
+> design. See the [roadmap](docs/roadmap.md).
 
 ## Installation
 
@@ -57,24 +60,56 @@ machine. `docker-compose.yml` provides a throwaway Ubuntu box for that: an unpri
 account with passwordless sudo, mise on PATH, and this repo bind-mounted at `/workspace`, so
 edits on the host apply immediately.
 
-```bash
-docker compose run --rm ops                                  # clean machine, interactive shell
-docker compose run --rm ops ops tool install jq --dry-run    # clean machine, one command
-```
-
-Each `run --rm` starts from the image again — right for testing a first-time install. To check
-that a command is idempotent, keep one container alive so apt and mise state carries over:
+The `docker:*` mise tasks drive it, so there is nothing to memorise — `mise tasks` lists them.
+`mise.toml` also defines `mr` as a shorthand for `mise run`, available in an interactive shell
+inside this directory:
 
 ```bash
-docker compose up -d
-docker compose exec ops bash       # run the same command twice in here
-docker compose down                # stop; node_modules volumes survive
-docker compose down -v             # stop and discard the volumes too
+mr bash                                        # interactive shell in the container
+mr docker:run ops tool install jq --dry-run    # one command, then gone
+mr root-bash                                   # same, as root (via sudo)
 ```
+
+`docker:run` is the primitive; `bash` and `root-bash` are it with a fixed command. Every
+argument reaches the container untouched, flags included.
+
+`mr` comes from mise's `[shell_alias]`, so it needs `mise activate` in your shell and it only
+exists while you are in this directory. Scripts, CI and anything non-interactive have to spell
+out `mise run` — shell aliases do not reach them.
+
+By default each command gets a container of its own, starting from the image again — right for
+testing a first-time install. To check that a command is idempotent, keep one container alive
+and the tasks use it instead, so apt and mise state carries from one command to the next:
+
+```bash
+mr up                                    # start it; now the commands above reuse this container
+mr docker:run ops tool install jq --yes  # run the same thing twice: the second
+mr docker:run ops tool install jq --yes  # time must report it already installed
+mr down                                  # stop it; the node_modules volumes survive
+mr reset                                 # stop it and discard the volumes too
+```
+
+**Type `mr up`, never `mise up`.** mise ships its own `up`, an alias for `upgrade`, and it wins:
+`mise up` upgrades the tools in `mise.toml` and says nothing about containers. `mr up` expands to
+`mise run up`, which can only mean the task. The same holds for any task whose name mise already
+uses. `mr docker:build` rebuilds the image.
+
+Without mise, every task is a short `docker compose` command; read
+`.mise/tasks/docker/run`. To reuse these tasks in another repo, copy `.mise/tasks/docker/`:
+they name no service, falling back to the only service in the compose file, and
+`COMPOSE_SERVICE` in `mise.toml` picks one when there are several.
 
 Inside the container, `ops` runs the local checkout (`apps/cli/bin/run.js`). Source changes need
 a `pnpm build` first, exactly as on the host. If your host account is not `1000:1000`, build with
 `UID=$(id -u) GID=$(id -g) docker compose build` to keep the mounted repo writable.
+
+The image answers every apt question in advance — debconf's frontend is set to `Noninteractive`
+on disk and tzdata is preconfigured. That is deliberate and not redundant with
+`DEBIAN_FRONTEND`: `sudo` resets the environment, so a variable set on the container never
+reaches `sudo apt-get`, and a tool that runs apt on its own behalf (`ops tool setup
+agent-browser` does, via `agent-browser install --with-deps`) would otherwise stop on a prompt
+with nothing able to answer it. The timezone defaults to `Asia/Ho_Chi_Minh`; change it with
+`docker compose build --build-arg TZ=Etc/UTC`.
 
 ## Why Ops CLI?
 

@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+#MISE description="Run any command in the test container, e.g. mise run docker:run apt-get install -y sl"
+#MISE interactive=true
+#MISE raw_args=true
+#
+# The primitive every other docker:* task is built on, and the only one that
+# names a compose service -- so this whole directory drops into another repo
+# unchanged. Reuses the long-lived container when one is up, so apt and mise
+# state carries from one command to the next (that is what makes an idempotency
+# check possible), and otherwise starts a throwaway one.
+set -euo pipefail
+
+if ! command -v docker >/dev/null 2>&1; then
+  echo "docker not found. These tasks drive the container from the host; you are probably already inside it." >&2
+  exit 1
+fi
+
+cd "${MISE_PROJECT_ROOT:-$(dirname "${BASH_SOURCE[0]}")/../../..}"
+
+# Ours, not a variable docker compose itself reads (those are COMPOSE_PROJECT_NAME,
+# COMPOSE_FILE and friends). Set it in mise.toml's [env]; a compose file with a
+# single service needs no setting at all.
+service="${COMPOSE_SERVICE:-}"
+if [ -z "$service" ]; then
+  mapfile -t services < <(docker compose config --services 2>/dev/null)
+  case "${#services[@]}" in
+    1) service="${services[0]}" ;;
+    0) echo "no compose service found. Is there a docker-compose.yml in $PWD?" >&2; exit 1 ;;
+    *) echo "several compose services (${services[*]}). Set COMPOSE_SERVICE in mise.toml to pick one." >&2; exit 1 ;;
+  esac
+fi
+
+# docker compose will not allocate a TTY when stdin is not one (piped input, a
+# script, CI), and fails outright if asked to. Laravel Sail handles it the same way.
+tty_flag=()
+[ -t 0 ] || tty_flag=(-T)
+
+# `docker compose ps -q` also lists the one-off containers `docker compose run`
+# creates, so an interactive `mise run bash` open in another terminal would
+# swallow commands meant for a clean machine. Only what `up -d` created carries
+# oneoff=False.
+long_lived_container_running() {
+  local id
+  for id in $(docker compose ps --status running -q "$service" 2>/dev/null); do
+    if [ "$(docker inspect -f '{{index .Config.Labels "com.docker.compose.oneoff"}}' "$id" 2>/dev/null)" = "False" ]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+if long_lived_container_running; then
+  exec docker compose exec "${tty_flag[@]}" "$service" "$@"
+fi
+exec docker compose run --rm "${tty_flag[@]}" "$service" "$@"

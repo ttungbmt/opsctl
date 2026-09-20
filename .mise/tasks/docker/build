@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+#MISE description="Rebuild the test image"
+set -euo pipefail
+cd "${MISE_PROJECT_ROOT:-$(dirname "${BASH_SOURCE[0]}")/../../..}"
+exec docker compose build
