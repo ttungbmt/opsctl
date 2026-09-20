@@ -198,3 +198,34 @@ describe('setupTools', () => {
     expect(result.steps).toEqual([{tool: 'ab', step: 'browsers', status: 'already-configured'}])
   })
 })
+
+describe('assumeInstalled', () => {
+  /** A runner for which the tool's binary does not exist yet. */
+  const absent = {
+    async run(cmd: string) {
+      throw new CommandNotFoundError(cmd)
+    },
+  }
+
+  it('treats a missing binary as pending when the run is about to install it', async () => {
+    // On a fresh machine `ops bootstrap` plans setup before packages has installed
+    // anything, so this must be pending rather than an error that aborts the run.
+    const {deps} = fixture(RECIPES, {assumeInstalled: new Set(['ab']), runner: absent})
+    const result = await setupTools(opts({dryRun: true, tools: ['ab']}), deps)
+    expect(result.steps[0].status).toBe('would-configure')
+    expect(result.steps[0].error).toBeUndefined()
+  })
+
+  it('still reports a missing binary as failed when nothing will install it', async () => {
+    const {deps} = fixture(RECIPES, {runner: absent})
+    const result = await setupTools(opts({dryRun: true, tools: ['ab']}), deps)
+    expect(result.steps[0].status).toBe('failed')
+    expect(result.steps[0].error).toContain('ops tool install ab')
+  })
+
+  it('does not assume a tool that is not in the set', async () => {
+    const {deps} = fixture(RECIPES, {assumeInstalled: new Set(['other']), runner: absent})
+    const result = await setupTools(opts({dryRun: true, tools: ['ab']}), deps)
+    expect(result.steps[0].status).toBe('failed')
+  })
+})

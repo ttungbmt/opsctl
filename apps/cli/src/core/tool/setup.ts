@@ -39,6 +39,12 @@ export interface SetupDeps {
   isTTY: boolean
   /** Called with the pending steps before the first one runs; never under --dry-run. */
   onPlan: (pending: SetupStepResult[]) => void
+  /**
+   * Tools something else in this run is about to install. A binary missing at probe time
+   * is then pending, not an error: `ops bootstrap` plans the setup section before the
+   * packages section has installed anything, and on a fresh machine nothing exists yet.
+   */
+  assumeInstalled?: ReadonlySet<string>
 }
 
 // A tool name must be non-empty, contain no whitespace, and not start with "-";
@@ -119,6 +125,7 @@ async function probe(tool: string, step: SetupStep, deps: SetupDeps): Promise<{s
     return {satisfied: result.exitCode === 0}
   } catch (error) {
     if (error instanceof CommandNotFoundError) {
+      if (deps.assumeInstalled?.has(tool)) return {satisfied: false}
       return {satisfied: false, error: `${error.command} not found on PATH; run \`ops tool install ${tool}\` first`}
     }
 
