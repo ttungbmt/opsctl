@@ -96,6 +96,21 @@ describe('loadConfig', () => {
     expect(error.message).toContain('/defaults.yaml')
   })
 
+  it('wraps a non-ENOENT read failure (e.g. EACCES) as CONFIG_INVALID naming the file', async () => {
+    const readFile = async (path: string) => {
+      if (path === '/defaults.yaml') throw Object.assign(new Error('permission denied'), {code: 'EACCES'})
+      throw Object.assign(new Error('missing'), {code: 'ENOENT'})
+    }
+    const readDir = async () => {
+      throw Object.assign(new Error('missing'), {code: 'ENOENT'})
+    }
+
+    const error = await errorOf(loadConfig(readFile, '/user.yaml', '/defaults.yaml', readDir))
+    expect(error.code).toBe('CONFIG_INVALID')
+    expect(error.message).toContain('/defaults.yaml')
+    expect(error.message).toContain('permission denied')
+  })
+
   it('refuses a catalog section left behind in defaults.yaml', async () => {
     // looseObject would keep it and nobody would read it: a recipe that silently does nothing.
     const tool = await errorOf(load(undefined, DEFAULTS + 'tool:\n  ab:\n    package: apt:ab\n'))

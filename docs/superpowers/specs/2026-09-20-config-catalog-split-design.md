@@ -164,9 +164,11 @@ for free when such a command arrives.
 ## Shape of the code
 
 The loader change is confined to `src/core/config.ts`. The only other source
-files touched carry user-facing help text that names where recipes live — the
-`description` strings in `src/commands/tool/install.ts`, `setup.ts` and
-`uninstall.ts`. No consumer of `Config` changes, because `Config` does not.
+file touched carries user-facing help text that names where recipes live — the
+`description` string in `src/commands/tool/setup.ts`. `install.ts`'s help text
+references `package.system`, which stayed in `defaults.yaml`, and
+`uninstall.ts` never mentioned `config/defaults.yaml`, so neither needed a
+change. No consumer of `Config` changes, because `Config` does not.
 
 ```ts
 type ReadDir = (dir: string) => Promise<string[]>

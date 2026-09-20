@@ -1,7 +1,8 @@
 # Tool recipes
 
 One file per tool; the filename is the tool's name (`firefox.yaml` -> `firefox`),
-and the file is the recipe body.
+and the file is the recipe body. The filename must match `[a-z0-9][a-z0-9._-]*` and
+end in `.yaml`; `README.md` is the one other file allowed in this directory.
 
 A plain name resolves to `package` before any heuristic (the system list, the mise
 registry), so `ops tool install google-chrome` knows the real package name.

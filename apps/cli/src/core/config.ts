@@ -97,7 +97,7 @@ const RecipeSchema = z.looseObject({
 export const SECTION_ORDER = ['packages', 'tools', 'setup', 'services', 'shell', 'dotfiles'] as const
 export type SectionName = (typeof SECTION_ORDER)[number]
 
-/** A profile name is a config key and appears in output; same shape as a repo name. */
+/** A profile name is a config key and appears in output; same shape as EntryName. */
 const ProfileName = z.string().regex(/^[a-z0-9][a-z0-9._-]*$/, 'must match [a-z0-9][a-z0-9._-]*')
 
 /** A list section. A bare list ADDS to what `extends` brought in; add/remove adjusts it. */
@@ -275,10 +275,14 @@ export async function loadConfig(
 }
 
 async function readYaml<T>(readFile: ReadFile, path: string, schema: z.ZodType<T>): Promise<T> {
-  const text = await readFile(path)
   try {
+    const text = await readFile(path)
     return schema.parse(parse(text) ?? {})
   } catch (error) {
+    // loadConfig reads ENOENT on the user config file as "no user config, use defaults
+    // only" -- let it through unwrapped so that meaning survives instead of becoming a
+    // CONFIG_INVALID this file never had.
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') throw error
     const detail = error instanceof z.ZodError ? z.prettifyError(error) : (error as Error).message
     throw new OpsError('CONFIG_INVALID', `Invalid config ${path}: ${detail}`)
   }

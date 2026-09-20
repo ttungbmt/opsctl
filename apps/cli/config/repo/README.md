@@ -1,7 +1,8 @@
 # Vendor apt repositories
 
 One file per repository; the filename is the repo's name, referenced from a recipe's
-`repo:` field in `../tool/`.
+`repo:` field in `../tool/`. The filename must match `[a-z0-9][a-z0-9._-]*` and end in
+`.yaml`; `README.md` is the one other file allowed in this directory.
 
 For `<name>.yaml` ops writes `/etc/apt/keyrings/ops-<name>.asc`,
 `/etc/apt/sources.list.d/ops-<name>.sources` and `/etc/apt/preferences.d/ops-<name>.pref`,
