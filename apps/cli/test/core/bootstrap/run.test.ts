@@ -1,8 +1,9 @@
 import {describe, expect, it, vi} from 'vitest'
-import {type BootstrapDeps, bootstrapProfile} from '../../../src/core/bootstrap/run.js'
+import {bootstrapProfile, haltedBeforePlan, type BootstrapDeps} from '../../../src/core/bootstrap/run.js'
 import type {BootstrapOptions, Change, Section, SectionPlan, SectionRegistry} from '../../../src/core/bootstrap/section.js'
 import type {SectionName} from '../../../src/core/config.js'
 import {OpsError} from '../../../src/core/errors.js'
+import type {PreflightResult} from '../../../src/core/preflight.js'
 import {profileIndex} from '../../../src/core/profile/resolve.js'
 
 /** Records plan/apply order across every section in one shared log. */
@@ -252,5 +253,29 @@ describe('bootstrapProfile failure handling', () => {
   it('surfaces PROFILE_NOT_FOUND for an unknown profile', async () => {
     const log: string[] = []
     await expect(bootstrapProfile(opts({profile: 'nope'}), deps({packages: stub('packages', log)}))).rejects.toThrow(/No profile "nope"/)
+  })
+})
+
+describe('haltedBeforePlan', () => {
+  it('reports a run that never got to plan anything', () => {
+    const stopped: PreflightResult = {
+      action: 'preflight',
+      changes: [{id: 'mise', status: 'would-change', command: 'sudo env ... sh <installer>'}],
+      commands: ['download https://mise.run'],
+      dryRun: true,
+      satisfied: false,
+    }
+    const profile = profileIndex({base: {packages: ['git']}, p: {extends: 'base'}}).resolve('p')
+    expect(haltedBeforePlan(profile, opts({dryRun: true}), stopped)).toEqual({
+      action: 'bootstrap',
+      commands: ['download https://mise.run'],
+      counts: {changed: 0, failed: 0, satisfied: 0, skipped: 0, 'would-change': 0},
+      dryRun: true,
+      lineage: ['base', 'p'],
+      preflight: stopped,
+      profile: 'p',
+      sections: [],
+      success: false,
+    })
   })
 })

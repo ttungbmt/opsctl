@@ -4,6 +4,7 @@ import type {MiseBootstrap, PackageState} from '../../providers/mise-bootstrap.j
 import type {MiseTools} from '../../providers/mise-tools.js'
 import type {SystemManager} from '../../providers/os.js'
 import {OpsError} from '../errors.js'
+import type {PreflightResult} from '../preflight.js'
 import type {AptRepo} from '../repo.js'
 import type {Stage} from '../stage.js'
 import type {PrepareStep, RecipeIndex} from '../tool/recipe.js'
@@ -21,6 +22,21 @@ export interface InstallResult {
   /** Dry run only: what mise would do. */
   commands?: string[]
   packages: {spec: PackageSpec; status: PackageStatus; version?: string; error?: string}[]
+  /** What the mise preflight did; attached by the command layer. */
+  preflight?: PreflightResult
+}
+
+/** The result of an install that stopped in preflight: nothing was resolved, so nothing is reported. */
+export function haltedBeforeInstall(options: InstallOptions, preflight: PreflightResult): InstallResult {
+  return {
+    action: 'install',
+    commands: preflight.commands ?? [],
+    dryRun: options.dryRun,
+    managers: [],
+    packages: [],
+    preflight,
+    success: false,
+  }
 }
 
 export interface InstallOptions {

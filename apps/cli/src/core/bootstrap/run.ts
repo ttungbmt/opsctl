@@ -1,6 +1,7 @@
 import {SECTION_ORDER, type SectionName} from '../config.js'
 import {OpsError} from '../errors.js'
-import {type ProfileIndex, declaresSection} from '../profile/resolve.js'
+import type {PreflightResult} from '../preflight.js'
+import {type ProfileIndex, type ResolvedProfile, declaresSection} from '../profile/resolve.js'
 import {
   type BootstrapOptions,
   type Change,
@@ -39,6 +40,33 @@ export interface BootstrapResult {
   /** Dry run only: every command the run would execute, in section order. */
   commands?: string[]
   counts: Record<ChangeStatus, number>
+  /**
+   * What the mise preflight did. Attached by the command layer, never by the engine: a
+   * preflight is not a section, so its change never enters `counts`.
+   */
+  preflight?: PreflightResult
+}
+
+/**
+ * The result of a run that stopped in preflight: no section plans to report, because
+ * computing one needs the tool the preflight was about to install.
+ */
+export function haltedBeforePlan(
+  profile: ResolvedProfile,
+  options: BootstrapOptions,
+  preflight: PreflightResult,
+): BootstrapResult {
+  return {
+    action: 'bootstrap',
+    commands: preflight.commands ?? [],
+    counts: {changed: 0, failed: 0, satisfied: 0, skipped: 0, 'would-change': 0},
+    dryRun: options.dryRun,
+    lineage: profile.lineage,
+    preflight,
+    profile: profile.name,
+    sections: [],
+    success: false,
+  }
 }
 
 function tally(reports: {changes: Change[]}[]): Record<ChangeStatus, number> {
