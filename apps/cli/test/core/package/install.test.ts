@@ -4,6 +4,20 @@ import {type InstallDeps, type InstallOptions, installPackages} from '../../../s
 import type {PackageSpec} from '../../../src/core/package/spec.js'
 import type {ApplyOptions, MiseBootstrap, PackageState} from '../../../src/providers/mise-bootstrap.js'
 import type {InstallToolOptions, MiseTools, ToolState} from '../../../src/providers/mise-tools.js'
+import {recipeIndex} from '../../../src/core/tool/recipe.js'
+import type {DebInstaller, InstallDebOptions} from '../../../src/providers/deb.js'
+
+class FakeDeb implements DebInstaller {
+  installs: {url: string; opts: InstallDebOptions}[] = []
+
+  describe(url: string) {
+    return [`download ${url}`]
+  }
+
+  async installFromUrl(url: string, opts: InstallDebOptions) {
+    this.installs.push({opts, url})
+  }
+}
 
 class FakeMise implements MiseBootstrap {
   calls: string[] = []
@@ -62,6 +76,17 @@ class FakeTools implements MiseTools {
     return {exitCode: this.installOnUse ? 0 : 1}
   }
 
+  // install never removes; present so the fake satisfies MiseTools.
+  async remove(names: string[], opts: InstallToolOptions) {
+    this.calls.push('remove')
+    for (const n of names) this.installed.delete(n)
+    return {exitCode: 0}
+  }
+
+  describeRemove(names: string[]) {
+    return names.map((n) => `mise unuse -g ${n}`)
+  }
+
   async dryRun(names: string[]) {
     this.calls.push('dryRun')
     return names.map((n) => `would use ${n}`)
@@ -71,17 +96,22 @@ class FakeTools implements MiseTools {
 function setup(overrides: Partial<InstallDeps> = {}) {
   const mise = new FakeMise()
   const tools = new FakeTools()
+  const deb = new FakeDeb()
   const deps: InstallDeps = {
+    deb,
     detectManager: async () => 'apt',
     isTTY: true,
     mise,
+    recipes: recipeIndex(),
     sudoReady: async () => true,
     systemPreferred: new Set(['zsh']),
     tools,
     ...overrides,
   }
-  return {deps, mise, tools}
+  return {deb, deps, mise, tools}
 }
+
+const CHROME = {'google-chrome': {package: 'apt:google-chrome-stable', prepare: {deb: 'https://example.test/chrome.deb'}}}
 
 const opts = (o: Partial<InstallOptions>): InstallOptions => ({dryRun: false, json: false, nonInteractive: false, packages: [], yes: false, ...o})
 
@@ -117,6 +147,101 @@ describe('installPackages', () => {
       {spec: 'apt:sl', status: 'installed', version: '1.0'},
     ])
     expect(result.success).toBe(true)
+  })
+
+  it('installs a prepared package from its .deb instead of through apt', async () => {
+    const {deps, deb, mise} = setup({recipes: recipeIndex(CHROME)})
+    mise.installOnApply = false // nothing reaches mise.apply, so this must not matter
+    const result = await installPackages(opts({packages: ['google-chrome'], yes: true}), deps)
+
+    expect(deb.installs).toHaveLength(1)
+    expect(deb.installs[0].url).toBe('https://example.test/chrome.deb')
+    expect(deb.installs[0].opts).toMatchObject({capture: false, nonInteractive: false})
+    expect(mise.applied).toEqual([])
+    // Declared anyway, so the desired state is recorded and later updates go through apt.
+    expect([...mise.declared]).toEqual(['apt:google-chrome-stable'])
+    expect(result.packages).toEqual([{spec: 'apt:google-chrome-stable', status: 'failed'}])
+  })
+
+  it('reports a prepared package as installed once apt sees it', async () => {
+    const {deps, deb, mise} = setup({recipes: recipeIndex(CHROME)})
+    // The .deb install is what makes it appear, so mirror that in the fake.
+    deb.installFromUrl = async (url, o) => {
+      deb.installs.push({opts: o, url})
+      mise.installed.set('apt:google-chrome-stable', '152.0')
+    }
+    const result = await installPackages(opts({packages: ['google-chrome'], yes: true}), deps)
+    expect(result.packages).toEqual([{spec: 'apt:google-chrome-stable', status: 'installed', version: '152.0'}])
+    expect(result.success).toBe(true)
+  })
+
+  it('passes the progress reporter down to the .deb installer', async () => {
+    const onProgress = () => {}
+    const {deps, deb} = setup({onProgress, recipes: recipeIndex(CHROME)})
+    await installPackages(opts({packages: ['google-chrome'], yes: true}), deps)
+    expect(deb.installs[0].opts.onProgress).toBe(onProgress)
+  })
+
+  it('labels each stage with the spec deb.ts cannot know', async () => {
+    const seen: [string, string][] = []
+    const {deps, deb} = setup({onStage: (stage, spec) => seen.push([stage, spec]), recipes: recipeIndex(CHROME)})
+    deb.installFromUrl = async (url, o) => {
+      deb.installs.push({opts: o, url})
+      o.onStage?.('downloading')
+      o.onStage?.('installing')
+    }
+    await installPackages(opts({packages: ['google-chrome'], yes: true}), deps)
+    expect(seen).toEqual([
+      ['downloading', 'apt:google-chrome-stable'],
+      ['installing', 'apt:google-chrome-stable'],
+    ])
+  })
+
+  it('captures subprocess output when a spinner owns the terminal', async () => {
+    const {deps, deb} = setup({captureOutput: true, recipes: recipeIndex(CHROME)})
+    await installPackages(opts({packages: ['google-chrome'], yes: true}), deps)
+    expect(deb.installs[0].opts.capture).toBe(true) // even though --json is off
+  })
+
+  it('skips the .deb download when the tool is already installed', async () => {
+    const {deps, deb, mise} = setup({recipes: recipeIndex(CHROME)})
+    mise.installed.set('apt:google-chrome-stable', '152.0')
+    const result = await installPackages(opts({packages: ['google-chrome'], yes: true}), deps)
+
+    expect(deb.installs).toEqual([])
+    expect(mise.applied).toEqual([])
+    expect(result.packages).toEqual([{spec: 'apt:google-chrome-stable', status: 'already-installed', version: '152.0'}])
+  })
+
+  it('sends prepared and ordinary packages down their own paths', async () => {
+    const {deps, deb, mise} = setup({recipes: recipeIndex(CHROME)})
+    await installPackages(opts({packages: ['google-chrome', 'sl'], yes: true}), deps)
+
+    expect(deb.installs.map((i) => i.url)).toEqual(['https://example.test/chrome.deb'])
+    expect(mise.applied).toEqual([{opts: {capture: false, nonInteractive: false, yes: true}, specs: ['apt:sl']}])
+  })
+
+  it('dry-run shows the download without installing anything', async () => {
+    const {deps, deb, mise} = setup({recipes: recipeIndex(CHROME)})
+    const result = await installPackages(opts({dryRun: true, packages: ['google-chrome']}), deps)
+
+    expect(result.commands).toContain('download https://example.test/chrome.deb')
+    expect(deb.installs).toEqual([])
+    expect(mise.applied).toEqual([])
+    expect(result.packages).toEqual([{spec: 'apt:google-chrome-stable', status: 'would-install'}])
+  })
+
+  it('dry-run never asks mise to describe a prepared package', async () => {
+    const {deps, mise} = setup({recipes: recipeIndex(CHROME)})
+    const result = await installPackages(opts({dryRun: true, packages: ['google-chrome', 'sl']}), deps)
+
+    // mise would print an apt command for a spec that never reaches mise.apply.
+    expect(result.commands).toEqual([
+      'download https://example.test/chrome.deb',
+      'declare "apt:google-chrome-stable" in [bootstrap.packages]',
+      'would install apt:sl',
+    ])
+    expect(mise.calls).not.toContain('apply')
   })
 
   it('marks packages still missing after apply as failed', async () => {

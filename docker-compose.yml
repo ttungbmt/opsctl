@@ -1,0 +1,35 @@
+# Throwaway Ubuntu box for testing the `ops` CLI against a real system.
+#
+#   docker compose run --rm ops                 # clean machine, shell
+#   docker compose run --rm ops ops --version   # clean machine, one command
+#   docker compose up -d && docker compose exec ops bash   # state survives
+#
+# `docker compose down -v` also drops the node_modules volumes.
+services:
+  ops:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      args:
+        # Override when the host account is not 1000:1000, so the bind-mounted
+        # repo stays writable:  UID=$(id -u) GID=$(id -g) docker compose build
+        UID: "${UID:-1000}"
+        GID: "${GID:-1000}"
+    # Uncomment on an arm64 host: the google-chrome recipe in
+    # apps/cli/config/defaults.yaml points at an amd64-only .deb.
+    # platform: linux/amd64
+    init: true
+    stdin_open: true
+    tty: true
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+      # pnpm's node_modules is a symlink tree into its own store; keep the
+      # container's separate from the host's instead of sharing one.
+      - root_modules:/workspace/node_modules
+      - cli_modules:/workspace/apps/cli/node_modules
+    command: bash
+
+volumes:
+  root_modules:
+  cli_modules:

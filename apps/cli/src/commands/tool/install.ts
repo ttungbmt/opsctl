@@ -1,13 +1,33 @@
-import {Args, Command, Flags} from '@oclif/core'
+import {Args, Command, Flags, ux} from '@oclif/core'
 
 import {loadConfig} from '../../core/config.js'
 import {OpsError} from '../../core/errors.js'
-import {renderInstallResult} from '../../core/output.js'
+import {downloadProgress, renderInstallResult} from '../../core/output.js'
+import {styleFor} from '../../core/style.js'
 import {type InstallResult, installPackages} from '../../core/package/install.js'
+import {recipeIndex} from '../../core/tool/recipe.js'
 import {execaRunner, sudoReady} from '../../executor/exec.js'
+import {createDebInstaller} from '../../providers/deb.js'
 import {createMiseBootstrap} from '../../providers/mise-bootstrap.js'
 import {createMiseTools} from '../../providers/mise-tools.js'
 import {detectSystemManager} from '../../providers/os.js'
+import type {Stage} from '../../providers/deb.js'
+
+/**
+ * Hands the terminal from the progress line to the spinner. The progress line is written
+ * with \r and never newline-terminated, so without this the spinner overwrites it.
+ */
+export function spinnerHandover(
+  start: (label: string) => void,
+  write: (s: string) => void,
+  showsProgress: boolean,
+): (stage: Stage, spec: string) => void {
+  return (stage, spec) => {
+    if (stage !== 'installing') return
+    if (showsProgress) write('\n')
+    start(`installing ${spec}`)
+  }
+}
 
 export default class ToolInstall extends Command {
   static override summary = 'Install a tool'
@@ -36,6 +56,17 @@ export default class ToolInstall extends Command {
   async run(): Promise<InstallResult> {
     const {argv, flags} = await this.parse(ToolInstall)
     const config = await loadConfig()
+    // Progress goes to stderr so --json stdout stays clean, and only when someone is watching.
+    const onProgress =
+      this.jsonEnabled() || !process.stderr.isTTY
+        ? undefined
+        : downloadProgress((line) => process.stderr.write(`\r${line.padEnd(48)}`))
+
+    // A spinner and sudo's password prompt would fight over the terminal, so spin only
+    // once sudo is known not to ask. Otherwise apt keeps streaming, as it does today.
+    const mayInstall = !flags['dry-run'] && !this.jsonEnabled() && process.stderr.isTTY
+    const spin = mayInstall && (await sudoReady(execaRunner))
+
     const result = await installPackages(
       {
         dryRun: flags['dry-run'],
@@ -45,21 +76,32 @@ export default class ToolInstall extends Command {
         yes: flags.yes,
       },
       {
+        deb: createDebInstaller(execaRunner),
         detectManager: () => detectSystemManager(),
         isTTY: Boolean(process.stdin.isTTY),
+        captureOutput: spin,
         mise: createMiseBootstrap(execaRunner),
+        onProgress,
+        onStage: spin
+          ? spinnerHandover((label) => ux.action.start(label), (text) => process.stderr.write(text), Boolean(onProgress))
+          : undefined,
+        recipes: recipeIndex(config.tool),
         sudoReady: () => sudoReady(execaRunner),
         systemPreferred: new Set(config.package.system),
         tools: createMiseTools(execaRunner),
       },
     )
 
-    if (!this.jsonEnabled()) for (const line of renderInstallResult(result)) this.log(line)
+    if (ux.action.running) ux.action.stop()
+    if (!this.jsonEnabled()) for (const line of renderInstallResult(result, styleFor(this.jsonEnabled()))) this.log(line)
     if (!result.success) process.exitCode = 1
     return result
   }
 
   protected override async catch(error: Error & {exitCode?: number}): Promise<unknown> {
+    // oclif only stops the spinner inside super.catch(), which the OpsError branch skips;
+    // a spinner left running scribbles over the very message the user needs to read.
+    if (ux.action.running) ux.action.stop('failed')
     if (!(error instanceof OpsError)) return super.catch(error)
     if (this.jsonEnabled()) {
       process.exitCode = 1

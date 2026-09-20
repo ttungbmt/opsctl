@@ -2,7 +2,9 @@ import {describe, expect, it} from 'vitest'
 import {OpsError} from '../../../src/core/errors.js'
 import {resolveSpecs} from '../../../src/core/package/resolve.js'
 
-function deps(registry: string[] = [], preferred: ReadonlySet<string> = new Set(['zsh', 'tmux'])) {
+const CHROME = {package: 'apt:google-chrome-stable', prepare: {deb: 'https://example.test/chrome.deb'}}
+
+function deps(registry: string[] = [], preferred: ReadonlySet<string> = new Set(['zsh', 'tmux']), recipes: Record<string, {package: string}> = {}) {
   const lookups: string[] = []
   let detections = 0
   return {
@@ -15,6 +17,7 @@ function deps(registry: string[] = [], preferred: ReadonlySet<string> = new Set(
         lookups.push(name)
         return registry.includes(name)
       },
+      recipe: (name: string) => recipes[name],
       systemPreferred: preferred,
     },
     detections: () => detections,
@@ -54,6 +57,33 @@ describe('resolveSpecs', () => {
     const error = await resolveSpecs(['--force'], d.deps).catch((e: unknown) => e)
     expect((error as OpsError).code).toBe('INVALID_PACKAGE_NAME')
     expect(d.lookups).toEqual(['jq'])
+  })
+
+  it('resolves a recipe name to its package without any lookup', async () => {
+    const d = deps(['google-chrome'], new Set(['zsh']), {'google-chrome': CHROME})
+    expect(await resolveSpecs(['google-chrome'], d.deps)).toEqual(['apt:google-chrome-stable'])
+    expect(d.lookups).toEqual([])
+    expect(d.detections()).toBe(0)
+  })
+
+  it('lets a recipe beat the system list and the registry', async () => {
+    const d = deps(['google-chrome'], new Set(['google-chrome']), {'google-chrome': CHROME})
+    expect(await resolveSpecs(['google-chrome'], d.deps)).toEqual(['apt:google-chrome-stable'])
+    expect(d.lookups).toEqual([])
+  })
+
+  // agent-browser is in the mise registry; its recipe exists only to carry setup
+  // steps, so resolution must land on exactly what the registry lookup produced.
+  it('keeps a mise-tool recipe resolving to the same spec, minus the lookup', async () => {
+    const d = deps(['agent-browser'], new Set(), {'agent-browser': {package: 'mise:agent-browser'}})
+    expect(await resolveSpecs(['agent-browser'], d.deps)).toEqual(['mise:agent-browser'])
+    expect(d.lookups).toEqual([])
+    expect(d.detections()).toBe(0)
+  })
+
+  it('lets an explicit prefix beat a recipe', async () => {
+    const d = deps([], new Set(), {'google-chrome': CHROME})
+    expect(await resolveSpecs(['apt:chromium'], d.deps)).toEqual(['apt:chromium'])
   })
 
   it('follows the given system list', async () => {

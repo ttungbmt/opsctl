@@ -159,6 +159,8 @@ interface ToolProvider {
 
   install(): Promise<void>
 
+  setup(): Promise<void>
+
   update(): Promise<void>
 
   remove(): Promise<void>
@@ -166,6 +168,10 @@ interface ToolProvider {
   doctor(): Promise<DoctorResult>
 }
 ```
+
+`setup` ships today as config data (`tool.<name>.setup`) run by
+`src/core/tool/setup.ts`, not as a provider method; the interface is the target
+shape.
 
 ---
 

@@ -1,6 +1,6 @@
 import {describe, expect, it} from 'vitest'
 import {OpsError} from '../../src/core/errors.js'
-import {CommandNotFoundError} from '../../src/executor/exec.js'
+import {CommandNotFoundError} from '../../src/core/errors.js'
 import {createMiseBootstrap} from '../../src/providers/mise-bootstrap.js'
 import {FakeRunner} from '../helpers/fake-runner.js'
 

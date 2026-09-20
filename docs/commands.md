@@ -13,9 +13,7 @@ ops
 ├── doctor
 │
 ├── system
-├── package
 ├── tool
-├── setup
 ├── env
 ├── dotfiles
 ├── service
@@ -148,6 +146,10 @@ ops tool update terraform
 ops tool status docker
 
 ops tool doctor mise
+
+ops tool uninstall node
+
+ops tool uninstall google-chrome --purge
 ```
 
 ### How a tool gets installed
@@ -181,6 +183,31 @@ ops tool install apt:git
 ops tool install brew:jq
 ops tool install mise:aqua:BurntSushi/ripgrep
 ```
+
+### Recipes
+
+Some tools are not installable by name: `google-chrome` is neither a mise tool
+nor an apt package (the package is `google-chrome-stable`, and it only exists
+once Google's apt repository is configured). A **recipe** gives ops the real
+package name and, when needed, a `prepare` step that makes it installable on a
+machine that has never seen it.
+
+```yaml
+# ~/.config/ops/config.yaml — or the built-in config/defaults.yaml
+tool:
+  google-chrome:
+    summary: Google Chrome
+    package: apt:google-chrome-stable
+    prepare:
+      deb: https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+```
+
+A recipe name resolves to its package ahead of every heuristic, so
+`ops tool install google-chrome` works on a fresh machine. `prepare` runs only when the
+tool is missing, must use `https`, and is shown by `--dry-run` before anything is
+downloaded.
+
+---
 
 > **Note — package is a layer, not a command group.** Internally a *package* is
 > one entry of an OS package manager and a *tool* is the higher-level concept
@@ -260,6 +287,99 @@ Configure default branch
 Configure aliases
 Configure credentials
 ```
+
+### How setup works
+
+Setup steps are recipe data, not code. Each step pairs a `check` with the `run`
+that makes it pass:
+
+```yaml
+tool:
+  agent-browser:
+    package: mise:agent-browser
+    setup:
+      - name: browser binaries
+        check: [agent-browser, doctor, --quick, --offline]
+        run: [agent-browser, install, --with-deps]
+```
+
+`ops tool setup agent-browser` runs every `check` first, prints the steps it is
+about to apply, runs only those, then re-runs each `check` to verify it. A step
+already satisfied is never run again, so setup converges instead of repeating
+work:
+
+```bash
+ops tool setup agent-browser --dry-run   # what is missing, without changing anything
+ops tool setup agent-browser             # apply the missing steps
+ops tool setup agent-browser --json --yes
+```
+
+Because a step runs an arbitrary command from a file the user can write, the
+plan is always printed before anything runs, and `--json` or a non-terminal
+requires `--yes`. A `check` must fail only for what its `run` can repair —
+nothing enforces that, so it is the recipe author's job.
+
+## Removing a tool
+
+`ops tool uninstall <name>` is the inverse of `install`, and it undoes both halves
+of what install did: the package, and the declaration install wrote.
+
+```bash
+ops tool uninstall node                          # remove the package
+ops tool uninstall google-chrome --purge --yes   # and its config, cache and repo files
+ops tool uninstall node --dry-run                # what would happen, changing nothing
+```
+
+That second half matters. `install` records every system package in
+`[bootstrap.packages]` in mise's global config, so removing a package with
+`apt remove` alone leaves the declaration behind and the next `ops bootstrap`
+reinstalls it. `uninstall` deletes that line — and only that line, leaving the
+rest of the file, comments included, byte for byte as it was.
+
+How each kind is removed:
+
+| Kind | Command |
+|------|---------|
+| mise tool | `mise unuse -g <tool>` — drops the request and prunes the installation |
+| apt/dnf package | `apt-get remove\|purge` or `dnf remove`, then the declaration |
+| anything else | refused, naming the command that would work |
+
+mise cannot remove apt packages itself (`mise bootstrap packages prune` supports
+brew and plugin-backed managers, not apt), which is why ops runs the package
+manager directly here while still going through mise everywhere else.
+
+Being destructive, it inspects first, prints the plan, then acts and verifies:
+every package is re-probed with `dpkg-query`/`rpm` afterwards, and every purged
+path is re-checked. Before removing anything it runs `apt-get -s` and **refuses**
+if the removal would take packages with it that you did not name — apt reports
+dependents but does not refuse them, so ops does.
+
+### `--purge`
+
+`--purge` deletes what no package manager owns: the apt source and keyring a
+vendor `.deb` wrote, and the tool's own config and cache. Those paths are data,
+listed per recipe:
+
+```yaml
+tool:
+  google-chrome:
+    package: apt:google-chrome-stable
+    uninstall:
+      purge:
+        paths:
+          - /etc/apt/sources.list.d/google-chrome.sources
+          - ~/.config/google-chrome
+```
+
+Paths only — never commands, so a config file can never run something as root.
+Each is validated when the config loads, not when it is deleted: it must be
+absolute or `~/`-rooted, contain no `..`, name nothing shallower than two
+directories deep, and not be a shared root such as `~/.config`. A glob is
+rejected rather than passed to `rm`, which would not expand it. A path that does
+not exist is simply absent, so a recipe can list every known variant.
+
+Because these files sit outside any package manager, `--purge` always requires
+`--yes`, on a terminal as well.
 
 ---
 

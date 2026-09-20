@@ -15,3 +15,52 @@ package:
     - unzip
     - wget
     - zsh
+
+# Named tool recipes. A plain name resolves to `package` before any heuristic
+# (system list, mise registry), so `ops tool install google-chrome` knows the real
+# package name. `prepare` runs only when the tool is missing: it makes the
+# package installable on a machine that has never seen it. `setup` configures a
+# tool once it exists; each step's `check` decides whether `run` is needed and
+# verifies it afterwards, so a check must fail only for what its `run` repairs.
+# `uninstall.purge.paths` names what `ops tool uninstall --purge` deletes after
+# the package is gone: only what the package manager does not own itself. Paths
+# are absolute or `~/`-rooted, validated at load, and never expanded as globs.
+tool:
+  google-chrome:
+    summary: Google Chrome
+    package: apt:google-chrome-stable
+    prepare:
+      # Google's own .deb; its postinst configures the apt repo for later updates.
+      deb: https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+    uninstall:
+      # `--purge` only, and only what dpkg does not own. Verified with `dpkg -S`
+      # against a real install: /opt/google/chrome and the
+      # /etc/cron.daily/google-chrome symlink belong to the package and go with
+      # `apt-get purge`, while the two repo files below belong to nobody --
+      # Chrome's postinst writes them ("This file will not be recreated if
+      # removed") and they would re-add the repo on the next `apt update`.
+      # `.sources` is the deb822 name current Chrome writes and `.list` the
+      # older one; the keyring moved between releases. A path that does not
+      # exist is a no-op, so every known variant is listed.
+      purge:
+        paths:
+          - /etc/apt/sources.list.d/google-chrome.sources
+          - /etc/apt/sources.list.d/google-chrome.list
+          - /usr/share/keyrings/google-chrome.gpg
+          - /etc/apt/keyrings/google-chrome.gpg
+          - ~/.config/google-chrome
+          - ~/.cache/google-chrome
+
+  agent-browser:
+    summary: Browser automation CLI for AI agents
+    # Already in the mise registry (aqua:vercel-labs/agent-browser); the recipe
+    # exists to carry `setup`, and pins resolution so no registry lookup runs.
+    package: mise:agent-browser
+    setup:
+      # The binary alone cannot drive anything: `install` downloads Chrome for
+      # Testing and, with --with-deps, the system libraries it needs. `doctor`
+      # exits 1 when any check fails; --quick skips its live headless launch and
+      # --offline skips network probes, keeping the probe fast and local.
+      - name: browser binaries
+        check: [agent-browser, doctor, --quick, --offline]
+        run: [agent-browser, install, --with-deps]

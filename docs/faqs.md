@@ -1,0 +1,1 @@
+- [ ] Với kiến trúc hiện đang triển khai 

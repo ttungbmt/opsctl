@@ -1,7 +1,9 @@
+import type {DebInstaller, OnProgress, Stage} from '../../providers/deb.js'
 import type {MiseBootstrap, PackageState} from '../../providers/mise-bootstrap.js'
 import type {MiseTools} from '../../providers/mise-tools.js'
 import type {SystemManager} from '../../providers/os.js'
 import {OpsError} from '../errors.js'
+import type {PrepareStep, RecipeIndex} from '../tool/recipe.js'
 import {resolveSpecs} from './resolve.js'
 import {type PackageSpec, isToolSpec, managerOf, toolKey, toolName} from './spec.js'
 
@@ -37,6 +39,16 @@ export interface InstallDeps {
   sudoReady: () => Promise<boolean>
   /** Plain names installed with apt/dnf even when the mise registry has them. */
   systemPreferred: ReadonlySet<string>
+  /** Named recipes (`tool.<name>` in the config). */
+  recipes: RecipeIndex
+  /** Installs a .deb from a URL, for specs whose recipe has a prepare step. */
+  deb: DebInstaller
+  /** Shown while a .deb downloads; omitted when nobody is watching (--json, no TTY). */
+  onProgress?: OnProgress
+  /** Called as each .deb stage begins; deb.ts knows the stage, this layer adds the spec. */
+  onStage?: (stage: Stage, spec: PackageSpec) => void
+  /** Capture subprocess output instead of streaming it, when a spinner owns the terminal. */
+  captureOutput?: boolean
 }
 
 type Installed = Map<PackageSpec, {installed: boolean; version?: string}>
@@ -50,6 +62,7 @@ export async function installPackages(options: InstallOptions, deps: InstallDeps
   const specs = await resolveSpecs(options.packages, {
     detectManager: deps.detectManager,
     inRegistry: (name) => deps.tools.inRegistry(name),
+    recipe: deps.recipes.byName,
     systemPreferred: deps.systemPreferred,
   })
   const tools = specs.filter(isToolSpec)
@@ -58,9 +71,20 @@ export async function installPackages(options: InstallOptions, deps: InstallDeps
   const base = {action: 'install' as const, dryRun: options.dryRun, managers}
 
   if (options.dryRun) {
+    // A prepared spec never reaches mise.apply, so asking mise to describe it would
+    // print an apt command that will not run. Describe each path separately.
+    const prepared: {spec: PackageSpec; step: PrepareStep}[] = []
+    const plain: PackageSpec[] = []
+    for (const spec of system) {
+      const step = deps.recipes.prepareFor(spec)
+      if (step) prepared.push({spec, step})
+      else plain.push(spec)
+    }
+
     const commands = [
       ...(tools.length > 0 ? await deps.tools.dryRun(tools.map(toolName)) : []),
-      ...(system.length > 0 ? await deps.mise.dryRun(system) : []),
+      ...prepared.flatMap(({spec, step}) => [...deps.deb.describe(step.deb), `declare "${spec}" in [bootstrap.packages]`]),
+      ...(plain.length > 0 ? await deps.mise.dryRun(plain) : []),
     ]
     const state = new Map([
       ...(tools.length > 0 ? await toolState(deps, tools) : []),
@@ -117,8 +141,28 @@ async function installSystem(specs: PackageSpec[], options: InstallOptions, deps
       throw new OpsError('SUDO_PASSWORD_REQUIRED', 'sudo needs a password; run without --non-interactive or configure passwordless sudo')
     }
 
-    const yes = options.yes || options.nonInteractive
-    await deps.mise.apply(missing, {capture: options.json, nonInteractive: options.nonInteractive, yes})
+    // A prepared package is not in any configured repo yet, so apt cannot install it;
+    // its .deb carries the repo. Only what is left goes through mise.
+    const rest: PackageSpec[] = []
+    for (const spec of missing) {
+      const step = deps.recipes.prepareFor(spec)
+      if (step) {
+        await deps.deb.installFromUrl(step.deb, {
+          capture: options.json || deps.captureOutput === true,
+          nonInteractive: options.nonInteractive,
+          onProgress: deps.onProgress,
+          onStage: (stage) => deps.onStage?.(stage, spec),
+        })
+      } else {
+        rest.push(spec)
+      }
+    }
+
+    if (rest.length > 0) {
+      const yes = options.yes || options.nonInteractive
+      await deps.mise.apply(rest, {capture: options.json, nonInteractive: options.nonInteractive, yes})
+    }
+
     after = systemState(await deps.mise.status())
   }
 

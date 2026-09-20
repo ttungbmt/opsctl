@@ -171,6 +171,9 @@ importers:
       '@oclif/core':
         specifier: ^5.0.0
         version: 5.0.0
+      ansis:
+        specifier: ^3.17.0
+        version: 3.17.0
       execa:
         specifier: ^10.0.1
         version: 10.0.1

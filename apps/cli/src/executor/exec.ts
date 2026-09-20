@@ -1,9 +1,15 @@
 import {execa} from 'execa'
 
+import {CommandNotFoundError} from '../core/errors.js'
+
 export interface RunOptions {
   /** capture (default): collect output; inherit: stream stdout/stderr to the terminal. */
   stdout?: 'capture' | 'inherit'
   stdin?: 'inherit' | 'ignore'
+  /** Milliseconds before the command is killed; the result then carries a non-zero exit. */
+  timeout?: number
+  /** Added to the ambient environment, not replacing it. For output a parser must read, e.g. LC_ALL=C. */
+  env?: Record<string, string>
 }
 
 export interface RunResult {
@@ -17,16 +23,6 @@ export interface Runner {
   run(cmd: string, args: string[], opts?: RunOptions): Promise<RunResult>
 }
 
-export class CommandNotFoundError extends Error {
-  readonly command: string
-
-  constructor(command: string) {
-    super(`Command not found: ${command}`)
-    this.name = 'CommandNotFoundError'
-    this.command = command
-  }
-}
-
 export const execaRunner: Runner = {
   async run(cmd, args, opts = {}) {
     const output = opts.stdout === 'inherit' ? 'inherit' : 'pipe'
@@ -35,6 +31,8 @@ export const execaRunner: Runner = {
       stderr: output,
       stdin: opts.stdin ?? 'inherit',
       stdout: output,
+      ...(opts.timeout === undefined ? {} : {timeout: opts.timeout}),
+      ...(opts.env === undefined ? {} : {env: opts.env}),
     })
 
     if ((result as {code?: string}).code === 'ENOENT') throw new CommandNotFoundError(cmd)

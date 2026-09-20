@@ -1,5 +1,6 @@
 import {describe, expect, it} from 'vitest'
-import {CommandNotFoundError, execaRunner, sudoReady} from '../../src/executor/exec.js'
+import {CommandNotFoundError} from '../../src/core/errors.js'
+import {execaRunner, sudoReady} from '../../src/executor/exec.js'
 import {FakeRunner} from '../helpers/fake-runner.js'
 
 describe('execaRunner', () => {
@@ -11,6 +12,20 @@ describe('execaRunner', () => {
   it('passes arguments verbatim (no shell)', async () => {
     const result = await execaRunner.run('node', ['-e', 'process.stdout.write(process.argv[1])', '$HOME; echo hi'])
     expect(result.stdout).toBe('$HOME; echo hi')
+  })
+
+  it('kills a command that outlives its timeout and reports a non-zero exit', async () => {
+    const result = await execaRunner.run('node', ['-e', 'setTimeout(() => {}, 5000)'], {timeout: 100})
+    expect(result.exitCode).not.toBe(0)
+  })
+
+  it('passes env to the child on top of the ambient environment', async () => {
+    const result = await execaRunner.run(
+      'node',
+      ['-e', 'process.stdout.write(`${process.env.LC_ALL}|${Boolean(process.env.PATH)}`)'],
+      {env: {LC_ALL: 'C'}},
+    )
+    expect(result.stdout).toBe('C|true')
   })
 
   it('throws CommandNotFoundError for a missing binary', async () => {

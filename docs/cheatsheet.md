@@ -69,7 +69,6 @@ ops
 ├── doctor
 ├── system
 ├── tool
-├── setup
 ├── env
 ├── service
 ├── docker
@@ -209,7 +208,8 @@ ops tool status docker
 
 ops tool doctor git
 
-ops tool remove node
+ops tool uninstall node
+ops tool uninstall google-chrome --purge
 ```
 
 ## 7.1 How a tool is installed
@@ -248,7 +248,28 @@ apt install ...
 brew install ...
 ```
 
-## 7.2 package = layer, not command group
+## 7.2 Recipes
+
+For tools that are not installable by name (`google-chrome` is not an apt
+package; `google-chrome-stable` is, and only with Google's repo configured):
+
+```yaml
+tool:
+  google-chrome:
+    package: apt:google-chrome-stable
+    prepare:
+      deb: https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+```
+
+A recipe wins over every heuristic below an explicit prefix. `prepare` runs only
+when the tool is missing, must be `https`, and shows up in `--dry-run`.
+
+A recipe also carries `setup` — the steps that configure the tool once it exists
+(§9). A recipe may have either half: `google-chrome` needs `prepare` and no
+`setup`; `agent-browser` installs straight from the mise registry and needs only
+`setup`.
+
+## 7.3 package = layer, not command group
 
 `ToolProvider` sits on top of `PackageManager` (§34). That layering is real in
 `src/`, but it stays internal — a user should never have to ask "is this a tool
@@ -299,17 +320,16 @@ ops tool install git
 Configure:
 
 ```bash
-ops setup git
+ops tool setup git
 ```
 
 Examples:
 
 ```bash
-ops setup git
-ops setup ssh
-ops setup mise
-ops setup docker
-ops setup shell
+ops tool setup agent-browser
+ops tool setup git
+ops tool setup mise
+ops tool setup docker
 ```
 
 Rule:
@@ -321,6 +341,26 @@ install
 setup
 → software behaves the way I want
 ```
+
+Setup is a verb on `tool`, not a command group of its own: the same
+one-public-noun rule that removed `ops package` (§7.3). Subjects that are not
+tools — `ssh`, `shell` — belong to their own groups (`ops ssh setup`), not to a
+top-level `ops setup`.
+
+Steps are config data, not code (§7.2):
+
+```yaml
+tool:
+  agent-browser:
+    package: mise:agent-browser
+    setup:
+      - name: browser binaries
+        check: [agent-browser, doctor, --quick, --offline]
+        run: [agent-browser, install, --with-deps]
+```
+
+`check` decides whether `run` is needed and verifies it afterwards, so a step
+must only claim what its `run` can repair.
 
 ---
 
@@ -1142,12 +1182,17 @@ interface ToolProvider {
   version(): Promise<string | null>
 
   install(): Promise<void>
+  setup(): Promise<void>
   update(): Promise<void>
   remove(): Promise<void>
 
   doctor(): Promise<DoctorResult>
 }
 ```
+
+> `setup` ships today as config data (`tool.<name>.setup`, §9) run by
+> `src/core/tool/setup.ts`, not as a provider method. The interface is the
+> target shape; nothing implements it yet.
 
 Package provider:
 

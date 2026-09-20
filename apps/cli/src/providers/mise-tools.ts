@@ -1,7 +1,7 @@
 import {z} from 'zod'
 
-import {OpsError} from '../core/errors.js'
-import {CommandNotFoundError, type RunOptions, type RunResult, type Runner} from '../executor/exec.js'
+import {CommandNotFoundError, OpsError} from '../core/errors.js'
+import {type RunOptions, type RunResult, type Runner} from '../executor/exec.js'
 
 export interface ToolState {
   /** Tool id as written in [tools], e.g. "fastfetch" or "aqua:owner/repo". */
@@ -21,6 +21,10 @@ export interface MiseTools {
   status(): Promise<ToolState[]>
   install(names: string[], opts: InstallToolOptions): Promise<{exitCode: number}>
   dryRun(names: string[]): Promise<string[]>
+  /** `mise unuse -g`: drops the request from [tools] and prunes the installation. */
+  remove(names: string[], opts: InstallToolOptions): Promise<{exitCode: number}>
+  /** What remove would do; `mise unuse` has no --dry-run of its own. */
+  describeRemove(names: string[]): string[]
 }
 
 // Only the fields ops relies on; unknown fields are ignored.
@@ -59,6 +63,8 @@ export function createMiseTools(runner: Runner): MiseTools {
   }
 
   return {
+    describeRemove: (names) => names.map((name) => `mise unuse -g ${name}`),
+
     async dryRun(names) {
       // mise prints the plan on both streams: installs on stderr, config changes on stdout.
       const {stderr, stdout} = await checked(['use', '-g', '--dry-run', ...names.map(withVersion)])
@@ -72,6 +78,18 @@ export function createMiseTools(runner: Runner): MiseTools {
 
     async install(names, opts) {
       const result = await mise(['use', '-g', ...names.map(withVersion)], {
+        stdin: opts.nonInteractive ? 'ignore' : 'inherit',
+        stdout: opts.capture ? 'capture' : 'inherit',
+      })
+      return {exitCode: result.exitCode}
+    },
+
+    /**
+     * Bare names, never withVersion(): `mise unuse` matches the configured request
+     * literally, so "node@latest" would miss a config that says node = "lts".
+     */
+    async remove(names, opts) {
+      const result = await mise(['unuse', '-g', ...names], {
         stdin: opts.nonInteractive ? 'ignore' : 'inherit',
         stdout: opts.capture ? 'capture' : 'inherit',
       })

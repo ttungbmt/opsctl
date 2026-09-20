@@ -143,7 +143,7 @@ ops tool setup
 ops tool update
 ops tool status
 ops tool doctor
-ops tool remove
+ops tool uninstall
 ```
 
 Ví dụ:

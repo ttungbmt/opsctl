@@ -50,6 +50,32 @@ pnpm install
 pnpm link:global   # symlinks ~/.local/bin/ops → apps/cli/bin/run.js
 ```
 
+## Testing in a container
+
+`ops` installs packages with sudo, apt-get and mise, so trying it out means letting it change a
+machine. `docker-compose.yml` provides a throwaway Ubuntu box for that: an unprivileged `ops`
+account with passwordless sudo, mise on PATH, and this repo bind-mounted at `/workspace`, so
+edits on the host apply immediately.
+
+```bash
+docker compose run --rm ops                                  # clean machine, interactive shell
+docker compose run --rm ops ops tool install jq --dry-run    # clean machine, one command
+```
+
+Each `run --rm` starts from the image again — right for testing a first-time install. To check
+that a command is idempotent, keep one container alive so apt and mise state carries over:
+
+```bash
+docker compose up -d
+docker compose exec ops bash       # run the same command twice in here
+docker compose down                # stop; node_modules volumes survive
+docker compose down -v             # stop and discard the volumes too
+```
+
+Inside the container, `ops` runs the local checkout (`apps/cli/bin/run.js`). Source changes need
+a `pnpm build` first, exactly as on the host. If your host account is not `1000:1000`, build with
+`UID=$(id -u) GID=$(id -g) docker compose build` to keep the mounted repo writable.
+
 ## Why Ops CLI?
 
 Modern environments depend on dozens of tools (package managers, mise, chezmoi, git, docker, yt-dlp, cloud CLIs…), each with its own commands, config formats, and flags. Ops CLI creates a unified abstraction over them.

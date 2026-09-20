@@ -1,6 +1,6 @@
 import {describe, expect, it} from 'vitest'
 import {OpsError} from '../../src/core/errors.js'
-import {CommandNotFoundError} from '../../src/executor/exec.js'
+import {CommandNotFoundError} from '../../src/core/errors.js'
 import {createMiseTools} from '../../src/providers/mise-tools.js'
 import {FakeRunner} from '../helpers/fake-runner.js'
 
@@ -76,5 +76,28 @@ describe('createMiseTools', () => {
     expect(await codeOf(createMiseTools(missing).inRegistry('jq'))).toBe('MISE_BOOTSTRAP_UNAVAILABLE')
     const failing = new FakeRunner().on('mise', {exitCode: 1, stderr: 'boom'})
     expect(await codeOf(createMiseTools(failing).dryRun(['nope']))).toBe('MISE_COMMAND_FAILED')
+  })
+
+  it('remove runs unuse -g with bare names, never pinning @latest', async () => {
+    const runner = new FakeRunner().on('mise', {exitCode: 0})
+    const tools = createMiseTools(runner)
+    await tools.remove(['fastfetch', 'node', 'aqua:a/b'], {capture: false, nonInteractive: false})
+    expect(runner.calls[0]).toMatchObject({
+      args: ['unuse', '-g', 'fastfetch', 'node', 'aqua:a/b'],
+      opts: {stdin: 'inherit', stdout: 'inherit'},
+    })
+  })
+
+  it('remove ignores stdin and captures output when asked', async () => {
+    const runner = new FakeRunner().on('mise', {exitCode: 0})
+    await createMiseTools(runner).remove(['fastfetch'], {capture: true, nonInteractive: true})
+    expect(runner.calls[0].opts).toMatchObject({stdin: 'ignore', stdout: 'capture'})
+  })
+
+  it('describes removal locally, since mise unuse has no dry run', () => {
+    expect(createMiseTools(new FakeRunner()).describeRemove(['fastfetch', 'node'])).toEqual([
+      'mise unuse -g fastfetch',
+      'mise unuse -g node',
+    ])
   })
 })
