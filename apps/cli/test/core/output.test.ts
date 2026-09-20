@@ -1,7 +1,8 @@
 import ansis from 'ansis'
 import {describe, expect, it} from 'vitest'
-import {downloadProgress, renderBootstrapPlan, renderBootstrapResult, renderInstallResult, renderProfileList, renderProfileShow, renderSetupPlan, renderSetupResult, renderUninstallPlan, renderUninstallResult, stageReporter} from '../../src/core/output.js'
+import {downloadProgress, renderBootstrapPlan, renderBootstrapResult, renderInstallResult, renderPreflight, renderPreflightPlan, renderProfileList, renderProfileShow, renderSetupPlan, renderSetupResult, renderUninstallPlan, renderUninstallResult, stageReporter} from '../../src/core/output.js'
 import type {BootstrapResult} from '../../src/core/bootstrap/run.js'
+import type {PreflightResult} from '../../src/core/preflight.js'
 import {ansiStyle, plainStyle} from '../../src/core/style.js'
 
 describe('renderInstallResult', () => {
@@ -493,5 +494,60 @@ describe('renderProfileShow', () => {
         services: [],
       }),
     ).toEqual(['Profile: dev  (base -> dev)', 'Local dev box', '', 'packages  git', 'tools     node'])
+  })
+})
+
+const preflight = (over: Partial<PreflightResult> = {}): PreflightResult => ({
+  action: 'preflight',
+  changes: [{id: 'mise', status: 'satisfied', detail: '2026.9.11'}],
+  dryRun: false,
+  satisfied: true,
+  ...over,
+})
+
+describe('renderPreflight', () => {
+  it('says nothing at all when mise was already there', () => {
+    // The common path must cost the reader nothing.
+    expect(renderPreflight(preflight())).toEqual([])
+  })
+
+  it('reports an install', () => {
+    expect(renderPreflight(preflight({changes: [{id: 'mise', status: 'changed', detail: '2026.9.11'}]}))).toEqual([
+      'preflight',
+      '+ mise  changed (2026.9.11)',
+      '',
+    ])
+  })
+
+  it('explains why a dry run can go no further', () => {
+    const lines = renderPreflight(
+      preflight({
+        changes: [{id: 'mise', status: 'would-change', detail: 'not installed', command: 'sudo env ... sh <installer>'}],
+        commands: ['download https://mise.run', 'sudo env ... sh <installer>'],
+        dryRun: true,
+        satisfied: false,
+      }),
+    )
+    expect(lines).toContain('~ mise  would change (not installed)')
+    expect(lines).toContain('Would run:')
+    expect(lines).toContain('  download https://mise.run')
+    expect(lines.some((l) => l.includes('nothing further can be planned'))).toBe(true)
+  })
+
+  it('reports a broken mise without claiming to have fixed it', () => {
+    const lines = renderPreflight(
+      preflight({changes: [{id: 'mise', status: 'skipped', detail: 'on PATH but did not answer --version: boom'}]}),
+    )
+    expect(lines).toContain('· mise  skipped (on PATH but did not answer --version: boom)')
+  })
+})
+
+describe('renderPreflightPlan', () => {
+  it('heads differently from a section plan, since a bare machine prints both', () => {
+    expect(renderPreflightPlan([{id: 'mise', status: 'would-change', command: 'sudo env ... sh <installer>'}])).toEqual([
+      'Preflight:',
+      '  mise  sudo env ... sh <installer>',
+      '',
+    ])
   })
 })

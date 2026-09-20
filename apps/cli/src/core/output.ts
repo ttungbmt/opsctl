@@ -1,6 +1,7 @@
 import type {OnProgress} from '../providers/deb.js'
 import type {BootstrapResult} from './bootstrap/run.js'
 import type {Change, ChangeStatus, SectionPlan} from './bootstrap/section.js'
+import type {PreflightResult} from './preflight.js'
 import type {ProfileSummary, ResolvedProfile} from './profile/resolve.js'
 import {type Style, plainStyle} from './style.js'
 import {type Stage, stageLabel} from './stage.js'
@@ -326,4 +327,34 @@ export function renderProfileShow(profile: ResolvedProfile, style: Style = plain
     '',
     ...declared.map(([name, value]) => `${style.heading(name.padEnd(width))}  ${value}`),
   ]
+}
+
+/**
+ * The preflight block. Empty when mise was already there: the common case must cost the
+ * reader nothing. --json carries the same data structurally and never calls this.
+ */
+export function renderPreflight(result: PreflightResult, style: Style = plainStyle): string[] {
+  if (result.changes.every((c) => c.status === 'satisfied')) return []
+
+  const lines = [style.heading('preflight'), ...changeLines(result.changes, style)]
+  if (result.commands && result.commands.length > 0) {
+    lines.push('', style.heading('Would run:'), ...result.commands.map((c) => style.muted(`  ${c}`)))
+  }
+
+  // The hole a dry run cannot fill: everything downstream is a mise call.
+  if (!result.satisfied) {
+    lines.push('', 'mise is not installed, so nothing further can be planned; re-run without --dry-run to install it.')
+  }
+
+  return [...lines, '']
+}
+
+/**
+ * Shown before mise is installed, so nothing runs unseen. Headed differently from a section
+ * plan, because a run on a bare machine prints both.
+ */
+export function renderPreflightPlan(changes: Change[], style: Style = plainStyle): string[] {
+  const width = column(changes.map((c) => c.id))
+  const rows = changes.map((c) => `  ${c.id.padEnd(width)}  ${style.muted(c.command ?? '')}`.trimEnd())
+  return [style.heading('Preflight:'), ...rows, '']
 }
