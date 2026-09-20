@@ -32,6 +32,7 @@ export default class ToolUninstall extends Command {
   }
   static override flags = {
     'dry-run': Flags.boolean({default: false, summary: 'Show what would be removed without changing anything'}),
+    force: Flags.boolean({default: false, summary: 'Remove even what ops itself depends on'}),
     'non-interactive': Flags.boolean({default: false, summary: 'Never prompt (implies --yes); fail if sudo needs a password'}),
     purge: Flags.boolean({default: false, summary: "Also delete the tool's config, cache and install traces (requires --yes)"}),
     yes: Flags.boolean({char: 'y', default: false, summary: 'Skip the confirmation prompt'}),
@@ -45,6 +46,7 @@ export default class ToolUninstall extends Command {
     const result = await uninstallPackages(
       {
         dryRun: flags['dry-run'],
+        force: flags.force,
         json: this.jsonEnabled(),
         nonInteractive: flags['non-interactive'],
         packages: argv as string[],

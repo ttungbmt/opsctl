@@ -165,8 +165,14 @@ const MiseSchema = z.strictObject({
 
 export type MiseConfig = z.infer<typeof MiseSchema>
 
-// Unknown keys are kept so other areas can add their own sections.
+/**
+ * Unknown keys are kept so other areas can add their own sections. Sections are declared
+ * in the order config/defaults.yaml lists them -- dependency order, each one referring
+ * only to something above it -- so the schema and the file read the same way.
+ */
 const DefaultsSchema = z.looseObject({
+  /** Where ops gets mise when a machine has none; the preflight reads it. */
+  mise: MiseSchema.optional(),
   package: z.looseObject({
     /** Plain names installed with apt/dnf instead of a mise tool. */
     system: NameList,
@@ -177,11 +183,15 @@ const DefaultsSchema = z.looseObject({
   tool: z.record(z.string(), RecipeSchema).default({}),
   /** Named machine profiles; `ops bootstrap <name>` converges the machine to one. */
   profile: z.record(ProfileName, ProfileSchema).default({}),
-  /** Where ops gets mise when a machine has none; the preflight reads it. */
-  mise: MiseSchema.optional(),
 })
 
+/** Same section order as DefaultsSchema. */
 const UserSchema = z.looseObject({
+  /**
+   * Replaced wholesale, unlike repo/tool/profile: both fields belong together, so the plain
+   * `{...defaults, ...user}` spread in mergeConfig is already the right behaviour.
+   */
+  mise: MiseSchema.optional(),
   package: z
     .looseObject({
       /** A list replaces the defaults; add/remove adjusts them. */
@@ -194,11 +204,6 @@ const UserSchema = z.looseObject({
   tool: z.record(z.string(), RecipeSchema).optional(),
   /** Profiles are merged by name; a user profile replaces the built-in of the same name. */
   profile: z.record(ProfileName, ProfileSchema).optional(),
-  /**
-   * Replaced wholesale, unlike repo/tool/profile: both fields belong together, so the plain
-   * `{...defaults, ...user}` spread in mergeConfig is already the right behaviour.
-   */
-  mise: MiseSchema.optional(),
 })
 
 export type Config = z.infer<typeof DefaultsSchema>

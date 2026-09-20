@@ -6,7 +6,8 @@ import type {SystemPackages} from '../../providers/system.js'
 import {OpsError} from '../errors.js'
 import type {RecipeIndex} from '../tool/recipe.js'
 import {resolveSpecs} from './resolve.js'
-import {type PackageSpec, isToolSpec, managerOf, toolKey, toolName} from './spec.js'
+import {MISE} from '../preflight.js'
+import {type PackageSpec, isToolSpec, managerOf, packageName, toolKey, toolName} from './spec.js'
 
 export type UninstallStatus = 'already-absent' | 'uninstalled' | 'would-uninstall' | 'skipped' | 'failed'
 export type PurgeStatus = 'already-absent' | 'removed' | 'would-remove' | 'skipped' | 'failed'
@@ -45,6 +46,8 @@ export interface UninstallResult {
 
 export interface UninstallOptions {
   packages: string[]
+  /** Remove even what ops depends on. */
+  force: boolean
   purge: boolean
   yes: boolean
   nonInteractive: boolean
@@ -93,6 +96,15 @@ export async function uninstallPackages(options: UninstallOptions, deps: Uninsta
   // Refuse before any I/O: half-removing a brew package is worse than saying no.
   for (const spec of specs) {
     const manager = managerOf(spec)
+    // Whichever manager owns it, mise is what ops drives; without it ops cannot install,
+    // uninstall or bootstrap anything again.
+    if (!options.force && packageName(spec) === MISE) {
+      throw new OpsError(
+        'UNINSTALL_WOULD_BREAK_OPS',
+        `"${spec}" is what ops runs on; removing it would leave ops unable to run. Re-run with --force if you mean it.`,
+      )
+    }
+
     if (!isToolSpec(spec) && !REMOVABLE.has(manager)) {
       throw new OpsError(
         'UNINSTALL_UNAVAILABLE',

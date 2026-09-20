@@ -173,7 +173,7 @@ function setup(overrides: Partial<UninstallDeps> = {}) {
 
 const run = (packages: string[], options: Partial<UninstallOptions> = {}, deps?: UninstallDeps) =>
   uninstallPackages(
-    {dryRun: false, json: false, nonInteractive: false, packages, purge: false, yes: true, ...options},
+    {dryRun: false, force: false, json: false, nonInteractive: false, packages, purge: false, yes: true, ...options},
     deps ?? setup().deps,
   )
 
@@ -460,5 +460,36 @@ describe('uninstallPackages', () => {
       expect(result.packages).toEqual([{spec: CHROME, status: 'already-absent'}])
       expect(t.system.removes).toEqual([])
     })
+  })
+})
+
+describe('removing mise', () => {
+  it('refuses, because mise is what ops runs on', async () => {
+    const error = await errorOf(run(['mise']))
+    expect(error.code).toBe('UNINSTALL_WOULD_BREAK_OPS')
+    expect(error.message).toContain('--force')
+  })
+
+  it('refuses whichever manager owns it', async () => {
+    expect((await errorOf(run(['apt:mise']))).code).toBe('UNINSTALL_WOULD_BREAK_OPS')
+    expect((await errorOf(run(['mise:mise']))).code).toBe('UNINSTALL_WOULD_BREAK_OPS')
+  })
+
+  it('refuses before any I/O, dry run included', async () => {
+    // A dry run shows what would happen, and what would happen is a refusal.
+    const t = setup()
+    expect((await errorOf(run(['mise'], {dryRun: true}, t.deps))).code).toBe('UNINSTALL_WOULD_BREAK_OPS')
+    expect(t.log).toEqual([])
+  })
+
+  it('goes ahead with --force', async () => {
+    const t = setup()
+    const result = await run(['mise'], {force: true}, t.deps)
+    expect(result.packages[0].spec).toBe('apt:mise')
+  })
+
+  it('leaves a package that merely contains "mise" alone', async () => {
+    const t = setup()
+    await expect(run(['promise'], {}, t.deps)).resolves.toBeTruthy()
   })
 })

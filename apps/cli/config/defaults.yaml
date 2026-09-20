@@ -1,4 +1,24 @@
 # Built-in defaults for ops. Override in ~/.config/ops/config.yaml (or $OPS_CONFIG).
+#
+# Ordering: top-level sections go in dependency order -- each one refers only to
+# something defined above it, so `mise` (the preflight prerequisite) comes first and
+# `profile` (which names tools and packages) comes last. Inside a section entries are
+# alphabetical, and an entry's keys follow its schema in src/core/config.ts. The one
+# exception is `profile`, which follows its `extends` chain instead: a profile reads as
+# an extension of the one above it, and test/core/config.test.ts pins that order.
+
+# Where ops gets mise when a machine has none. It cannot use `mise bootstrap packages`
+# for this -- that is the loop itself. ops downloads this script and runs it as argv
+# rather than piping it into a shell: the same trust, but a truncated download cannot
+# half-execute, which `curl | sh` permits. The script verifies sha256 checksums and
+# detects OS, architecture and libc itself.
+mise:
+  installer: https://mise.run
+  # /usr/local/bin is on every default PATH, so the rest of the run and every later
+  # shell find mise immediately. ~/.local/bin is only on PATH after a login that saw
+  # the directory already exist.
+  path: /usr/local/bin/mise
+
 package:
   # Plain names installed with apt/dnf even when the mise registry has them:
   # shells and base system packages that other software expects at system paths.
@@ -44,6 +64,27 @@ repo:
 # the package is gone: only what the package manager does not own itself. Paths
 # are absolute or `~/`-rooted, validated at load, and never expanded as globs.
 tool:
+  agent-browser:
+    summary: Browser automation CLI for AI agents
+    # Already in the mise registry (aqua:vercel-labs/agent-browser); the recipe
+    # exists to carry `setup`, and pins resolution so no registry lookup runs.
+    package: mise:agent-browser
+    setup:
+      # The binary alone cannot drive anything: `install` downloads Chrome for
+      # Testing and, with --with-deps, the system libraries it needs. `doctor`
+      # exits 1 when any check fails; --quick skips its live headless launch and
+      # --offline skips network probes, keeping the probe fast and local.
+      - name: browser binaries
+        check: [agent-browser, doctor, --quick, --offline]
+        run: [agent-browser, install, --with-deps]
+
+  firefox:
+    summary: Mozilla Firefox
+    # Mozilla publishes no standalone .deb, so there is nothing to `prepare`; the repo is what
+    # makes `apt:firefox` mean Mozilla's build rather than Ubuntu's snap shim.
+    package: apt:firefox
+    repo: mozilla
+
   google-chrome:
     summary: Google Chrome
     package: apt:google-chrome-stable
@@ -69,27 +110,6 @@ tool:
           - ~/.config/google-chrome
           - ~/.cache/google-chrome
 
-  agent-browser:
-    summary: Browser automation CLI for AI agents
-    # Already in the mise registry (aqua:vercel-labs/agent-browser); the recipe
-    # exists to carry `setup`, and pins resolution so no registry lookup runs.
-    package: mise:agent-browser
-    setup:
-      # The binary alone cannot drive anything: `install` downloads Chrome for
-      # Testing and, with --with-deps, the system libraries it needs. `doctor`
-      # exits 1 when any check fails; --quick skips its live headless launch and
-      # --offline skips network probes, keeping the probe fast and local.
-      - name: browser binaries
-        check: [agent-browser, doctor, --quick, --offline]
-        run: [agent-browser, install, --with-deps]
-
-  firefox:
-    summary: Mozilla Firefox
-    # Mozilla publishes no standalone .deb, so there is nothing to `prepare`; the repo is what
-    # makes `apt:firefox` mean Mozilla's build rather than Ubuntu's snap shim.
-    package: apt:firefox
-    repo: mozilla
-
 # Named machine profiles. `ops bootstrap <name>` converges the machine to one, and
 # `ops bootstrap` with no name runs `minimal`. `extends` composes: list sections are
 # concatenated base-first and deduplicated, so a profile states what it adds rather
@@ -97,6 +117,9 @@ tool:
 # wholesale -- build on one with `extends` instead of retyping it. `packages` resolves
 # the way `ops tool install` does; `tools` ignores package.system, so a bare name there
 # prefers the mise registry and may carry @version.
+#
+# Ordered by the `extends` chain rather than alphabetically: each profile reads as an
+# extension of the one above it.
 profile:
   base:
     summary: What ops itself needs on any machine
@@ -115,15 +138,3 @@ profile:
     packages: [zsh]
     # Pinned to the LTS line; pnpm tracks latest. A bare name records @latest.
     tools: [node@lts, pnpm]
-
-# Where ops gets mise when a machine has none. It cannot use `mise bootstrap packages`
-# for this -- that is the loop itself. ops downloads this script and runs it as argv
-# rather than piping it into a shell: the same trust, but a truncated download cannot
-# half-execute, which `curl | sh` permits. The script verifies sha256 checksums and
-# detects OS, architecture and libc itself.
-mise:
-  installer: https://mise.run
-  # /usr/local/bin is on every default PATH, so the rest of the run and every later
-  # shell find mise immediately. ~/.local/bin is only on PATH after a login that saw
-  # the directory already exist.
-  path: /usr/local/bin/mise

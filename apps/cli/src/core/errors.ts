@@ -15,6 +15,8 @@ export type OpsErrorCode =
   | 'REPO_PIN_UNSATISFIED'
   | 'UNINSTALL_UNAVAILABLE'
   | 'UNINSTALL_WOULD_REMOVE_DEPENDENTS'
+  /** The requested removal would take the tool ops itself runs on. */
+  | 'UNINSTALL_WOULD_BREAK_OPS'
   | 'MISE_CONFIG_EDIT_FAILED'
   /** `ops bootstrap <name>` named a profile the config does not define. */
   | 'PROFILE_NOT_FOUND'
