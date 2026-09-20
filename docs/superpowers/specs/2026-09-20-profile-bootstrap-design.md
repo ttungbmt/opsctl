@@ -114,7 +114,9 @@ Phases 2 and 3 add rows of data, not merge code.
 - **A diamond contributes its base once** — profiles are memoised and lists
   deduplicated.
 - **Object sections** (`shell`, `dotfiles`) shallow-merge key by key, child
-  wins.
+  wins. There is no way to delete an inherited key: the schemas are strict and
+  their required fields reject `null`. A child that wants different values
+  states them.
 - **`services` is keyed by `name`**: a child entry replaces the parent's
   wholesale, in the parent's position. Not per-key, because Zod applies
   `scope`/`enabled`/`state` defaults at parse time — after parsing, what the
@@ -211,6 +213,11 @@ uniformly is what keeps `output.ts` and the `--json` contract closed against new
 sections. `Change` is what a human needs; `SectionReport.detail` carries the
 section's full native result for `--json` consumers. A phase-2 section adds a
 `detail` payload type and no renderer code.
+
+The registry is built by `buildSections(deps)` in `src/core/bootstrap/registry.ts`.
+It takes its providers as arguments rather than reaching for them, so it stays in
+core and a test can assert exactly which sections a build supports without
+loading oclif. Phases 2 and 3 add one entry here and nowhere else.
 
 The engine iterates `SECTION_ORDER`, never the registry, so order is a property
 of the run rather than of insertion order in the registry.
@@ -337,6 +344,7 @@ Reused: `CONFIG_INVALID`, `CONFIRMATION_REQUIRED`.
 | `src/core/tool/setup.ts` | core | 1 | `assumeInstalled` |
 | `src/core/output.ts` | core | 1 | Bootstrap and profile renderers; receives `stageReporter` |
 | `src/core/errors.ts` | core | 1 | New codes |
+| `src/core/bootstrap/registry.ts` | core | 1 | `buildSections` — the one place a phase adds a section |
 | `src/commands/bootstrap.ts` | commands | 1 | Wiring, rendering, exit code |
 | `src/commands/profile/{list,show}.ts` | commands | 1 | Read-only |
 | `src/providers/systemd.ts` | providers | 2 | The only place that runs `systemctl` |
