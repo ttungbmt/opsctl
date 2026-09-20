@@ -55,3 +55,11 @@ describe('Bootstrap.catch', () => {
     expect(ux.action.running).toBe(false)
   })
 })
+
+describe('Bootstrap preflight flag', () => {
+  it('runs the preflight by default and can be turned off', () => {
+    // --no-preflight restores today's behaviour: the run dies at plan time.
+    expect(Bootstrap.flags.preflight.allowNo).toBe(true)
+    expect(Bootstrap.flags.preflight.default).toBe(true)
+  })
+})
