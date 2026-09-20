@@ -291,3 +291,36 @@ describe('profiles', () => {
     expect(config.profile.dev.tools).toEqual(['node@lts', 'pnpm'])
   })
 })
+
+describe('mise', () => {
+  it('reads the installer and install path', async () => {
+    const config = await load(undefined, DEFAULTS + 'mise:\n  installer: https://mise.run\n  path: /usr/local/bin/mise\n')
+    expect(config.mise).toEqual({installer: 'https://mise.run', path: '/usr/local/bin/mise'})
+  })
+
+  it('is undefined when the config says nothing', async () => {
+    expect((await load()).mise).toBeUndefined()
+  })
+
+  it('rejects a non-https installer', async () => {
+    // The script is downloaded and run as root; plain http is not negotiable.
+    const error = await errorOf(load(undefined, DEFAULTS + 'mise:\n  installer: http://mise.run\n  path: /usr/local/bin/mise\n'))
+    expect(error.code).toBe('CONFIG_INVALID')
+  })
+
+  it('rejects a relative install path', async () => {
+    const error = await errorOf(load(undefined, DEFAULTS + 'mise:\n  installer: https://mise.run\n  path: bin/mise\n'))
+    expect(error.code).toBe('CONFIG_INVALID')
+  })
+
+  it('lets a user override the installer wholesale', async () => {
+    const defaults = DEFAULTS + 'mise:\n  installer: https://mise.run\n  path: /usr/local/bin/mise\n'
+    const config = await load('mise:\n  installer: https://mirror.test/mise.sh\n  path: /opt/mise\n', defaults)
+    expect(config.mise).toEqual({installer: 'https://mirror.test/mise.sh', path: '/opt/mise'})
+  })
+
+  it('ships an installer and a path in the real defaults', async () => {
+    const config = await loadConfig(async (path) => readFile(path, 'utf8'), '/nonexistent/ops.yaml', defaultsPath())
+    expect(config.mise).toEqual({installer: 'https://mise.run', path: '/usr/local/bin/mise'})
+  })
+})

@@ -153,6 +153,18 @@ export type ServiceSpec = z.infer<typeof ServiceSchema>
 export type ShellSpec = z.infer<typeof ShellSchema>
 export type DotfilesSpec = z.infer<typeof DotfilesSchema>
 
+/**
+ * Where ops gets mise on a machine that has none. Strict, and https-only: the script is
+ * downloaded and run as root, so the protocol check belongs at the config boundary rather
+ * than in the provider that runs it.
+ */
+const MiseSchema = z.strictObject({
+  installer: HttpsUrl,
+  path: z.string().min(1).refine((value) => value.startsWith('/'), {message: 'must be an absolute path'}),
+})
+
+export type MiseConfig = z.infer<typeof MiseSchema>
+
 // Unknown keys are kept so other areas can add their own sections.
 const DefaultsSchema = z.looseObject({
   package: z.looseObject({
@@ -165,6 +177,8 @@ const DefaultsSchema = z.looseObject({
   tool: z.record(z.string(), RecipeSchema).default({}),
   /** Named machine profiles; `ops bootstrap <name>` converges the machine to one. */
   profile: z.record(ProfileName, ProfileSchema).default({}),
+  /** Where ops gets mise when a machine has none; the preflight reads it. */
+  mise: MiseSchema.optional(),
 })
 
 const UserSchema = z.looseObject({
@@ -180,6 +194,11 @@ const UserSchema = z.looseObject({
   tool: z.record(z.string(), RecipeSchema).optional(),
   /** Profiles are merged by name; a user profile replaces the built-in of the same name. */
   profile: z.record(ProfileName, ProfileSchema).optional(),
+  /**
+   * Replaced wholesale, unlike repo/tool/profile: both fields belong together, so the plain
+   * `{...defaults, ...user}` spread in mergeConfig is already the right behaviour.
+   */
+  mise: MiseSchema.optional(),
 })
 
 export type Config = z.infer<typeof DefaultsSchema>

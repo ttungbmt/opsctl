@@ -115,3 +115,15 @@ profile:
     packages: [zsh]
     # Pinned to the LTS line; pnpm tracks latest. A bare name records @latest.
     tools: [node@lts, pnpm]
+
+# Where ops gets mise when a machine has none. It cannot use `mise bootstrap packages`
+# for this -- that is the loop itself. ops downloads this script and runs it as argv
+# rather than piping it into a shell: the same trust, but a truncated download cannot
+# half-execute, which `curl | sh` permits. The script verifies sha256 checksums and
+# detects OS, architecture and libc itself.
+mise:
+  installer: https://mise.run
+  # /usr/local/bin is on every default PATH, so the rest of the run and every later
+  # shell find mise immediately. ~/.local/bin is only on PATH after a login that saw
+  # the directory already exist.
+  path: /usr/local/bin/mise
