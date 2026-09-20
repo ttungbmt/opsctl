@@ -175,16 +175,25 @@ export type MiseConfig = z.infer<typeof MiseSchema>
  * area can add its own section without touching this schema. `repo` and `tool` come from
  * config/repo/ and config/tool/ instead.
  */
-const DefaultsFileSchema = z.looseObject({
-  /** Where ops gets mise when a machine has none; the preflight reads it. */
-  mise: MiseSchema.optional(),
-  package: z.looseObject({
-    /** Plain names installed with apt/dnf instead of a mise tool. */
-    system: NameList,
-  }),
-  /** Named machine profiles; `ops bootstrap <name>` converges the machine to one. */
-  profile: z.record(ProfileName, ProfileSchema).default({}),
-})
+const DefaultsFileSchema = z
+  .looseObject({
+    /** Where ops gets mise when a machine has none; the preflight reads it. */
+    mise: MiseSchema.optional(),
+    package: z.looseObject({
+      /** Plain names installed with apt/dnf instead of a mise tool. */
+      system: NameList,
+    }),
+    /** Named machine profiles; `ops bootstrap <name>` converges the machine to one. */
+    profile: z.record(ProfileName, ProfileSchema).default({}),
+  })
+  .superRefine((value, ctx) => {
+    // Loose keeps unknown keys, so a catalog block left here would be kept and never read.
+    for (const key of ['repo', 'tool'] as const) {
+      if (key in value) {
+        ctx.addIssue({code: 'custom', path: [key], message: `${key} entries live in config/${key}/<name>.yaml, not here`})
+      }
+    }
+  })
 
 /** Same section order as DefaultsFileSchema. */
 const UserSchema = z.looseObject({

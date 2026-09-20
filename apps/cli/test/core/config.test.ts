@@ -96,6 +96,18 @@ describe('loadConfig', () => {
     expect(error.message).toContain('/defaults.yaml')
   })
 
+  it('refuses a catalog section left behind in defaults.yaml', async () => {
+    // looseObject would keep it and nobody would read it: a recipe that silently does nothing.
+    const tool = await errorOf(load(undefined, DEFAULTS + 'tool:\n  ab:\n    package: apt:ab\n'))
+    expect(tool.code).toBe('CONFIG_INVALID')
+    expect(tool.message).toContain('/defaults.yaml')
+    expect(tool.message).toContain('config/tool/')
+
+    const repo = await errorOf(load(undefined, DEFAULTS + 'repo:\n  m:\n    uri: https://x.test/apt\n'))
+    expect(repo.code).toBe('CONFIG_INVALID')
+    expect(repo.message).toContain('config/repo/')
+  })
+
   it('ships config/defaults.yaml with the system list and the google-chrome recipe', async () => {
     const config = await loadConfig((path) => readFile(path, 'utf8'), '/nonexistent/ops.yaml', defaultsPath())
     expect(config.package.system).toContain('zsh')
