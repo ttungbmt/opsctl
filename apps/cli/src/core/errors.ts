@@ -16,6 +16,10 @@ export type OpsErrorCode =
   | 'UNINSTALL_UNAVAILABLE'
   | 'UNINSTALL_WOULD_REMOVE_DEPENDENTS'
   | 'MISE_CONFIG_EDIT_FAILED'
+  /** `ops bootstrap <name>` named a profile the config does not define. */
+  | 'PROFILE_NOT_FOUND'
+  /** The profile declares a section this build of ops has no implementation for. */
+  | 'PROFILE_SECTION_UNSUPPORTED'
 
 export class OpsError extends Error {
   readonly code: OpsErrorCode
