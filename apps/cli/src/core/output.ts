@@ -1,4 +1,7 @@
 import type {OnProgress} from '../providers/deb.js'
+import type {BootstrapResult} from './bootstrap/run.js'
+import type {Change, ChangeStatus, SectionPlan} from './bootstrap/section.js'
+import type {ProfileSummary, ResolvedProfile} from './profile/resolve.js'
 import {type Style, plainStyle} from './style.js'
 import {type Stage, stageLabel} from './stage.js'
 import type {InstallResult, PackageStatus} from './package/install.js'
@@ -232,4 +235,95 @@ export function stageReporter(
     if (stage === 'installing' && showsProgress) write('\n')
     start?.(stageLabel(stage, subject))
   }
+}
+
+const CHANGE_LABELS: Record<ChangeStatus, [symbol: string, text: string, paint: Paint]> = {
+  changed: ['+', 'changed', 'add'],
+  failed: ['✗', 'failed', 'fail'],
+  satisfied: ['✓', 'already satisfied', 'ok'],
+  skipped: ['·', 'skipped', 'muted'],
+  'would-change': ['~', 'would change', 'warn'],
+}
+
+/** "Profile: dev  (base -> dev)", without the chain when a profile extends nothing. */
+function lineageOf(name: string, lineage: string[], style: Style): string {
+  const heading = `${style.heading('Profile:')} ${name}`
+  return lineage.length > 1 ? `${heading}  ${style.muted(`(${lineage.join(' -> ')})`)}` : heading
+}
+
+function changeLines(changes: Change[], style: Style): string[] {
+  const width = column(changes.map((c) => c.id))
+  return changes.map((c) => {
+    const [symbol, text, paint] = CHANGE_LABELS[c.status]
+    const label = `${text}${c.detail ? ` (${c.detail})` : ''}${c.error ? `: ${c.error}` : ''}`
+    // Pad before painting: escape codes count towards .length and would skew the columns.
+    return `${style[paint](symbol)} ${c.id.padEnd(width)}  ${c.error ? style.fail(label) : style.muted(label)}`
+  })
+}
+
+export function renderBootstrapResult(result: BootstrapResult, style: Style = plainStyle): string[] {
+  const lines = [lineageOf(result.profile, result.lineage, style)]
+
+  for (const section of result.sections) {
+    lines.push('', style.heading(section.section))
+    // A skipped section has no changes to show, and a blank block reads like a bug.
+    lines.push(...(section.changes.length > 0 ? changeLines(section.changes, style) : [style.muted('· skipped')]))
+  }
+
+  const {counts} = result
+  const summary = [
+    counts.changed > 0 ? `${counts.changed} changed` : '',
+    counts['would-change'] > 0 ? `${counts['would-change']} would change` : '',
+    counts.satisfied > 0 ? `${counts.satisfied} already satisfied` : '',
+    counts.failed > 0 ? `${counts.failed} failed` : '',
+    counts.skipped > 0 ? `${counts.skipped} skipped` : '',
+  ].filter(Boolean)
+  if (summary.length > 0) lines.push('', summary.join(' · '))
+
+  if (result.commands && result.commands.length > 0) {
+    lines.push('', style.heading('Would run:'), ...result.commands.map((c) => style.muted(`  ${c}`)))
+  }
+
+  return lines
+}
+
+/** Shown before the first section applies, so nothing runs unseen. */
+export function renderBootstrapPlan(plans: SectionPlan[], style: Style = plainStyle): string[] {
+  const pending = plans.flatMap((plan) =>
+    plan.changes.filter((c) => c.status === 'would-change').map((change) => ({change, section: plan.section})),
+  )
+  const section = column(pending.map((p) => p.section))
+  const id = column(pending.map((p) => p.change.id))
+  const rows = pending.map((p) =>
+    `  ${p.section.padEnd(section)}  ${p.change.id.padEnd(id)}  ${style.muted(p.change.command ?? '')}`.trimEnd(),
+  )
+  return [style.heading('Plan:'), ...rows, '']
+}
+
+export function renderProfileList(profiles: ProfileSummary[], style: Style = plainStyle): string[] {
+  const width = column(profiles.map((p) => p.name))
+  return profiles.map((p) => {
+    const parents = p.extends.length > 0 ? `  ${style.muted(`(extends ${p.extends.join(', ')})`)}` : ''
+    return `${p.name.padEnd(width)}  ${p.summary ?? ''}${parents}`.trimEnd()
+  })
+}
+
+export function renderProfileShow(profile: ResolvedProfile, style: Style = plainStyle): string[] {
+  const sections: [name: string, value: string][] = [
+    ['packages', profile.packages.join(' ')],
+    ['tools', profile.tools.join(' ')],
+    ['setup', profile.setup.join(' ')],
+    ['services', profile.services.map((s) => s.name).join(' ')],
+    ['shell', profile.shell?.name ?? ''],
+    ['dotfiles', profile.dotfiles?.repo ?? ''],
+  ]
+  const declared = sections.filter(([, value]) => value !== '')
+
+  const width = column(declared.map(([name]) => name))
+  return [
+    lineageOf(profile.name, profile.lineage, style),
+    ...(profile.summary ? [profile.summary] : []),
+    '',
+    ...declared.map(([name, value]) => `${style.heading(name.padEnd(width))}  ${value}`),
+  ]
 }

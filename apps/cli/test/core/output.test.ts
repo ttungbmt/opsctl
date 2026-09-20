@@ -1,6 +1,7 @@
 import ansis from 'ansis'
 import {describe, expect, it} from 'vitest'
-import {downloadProgress, renderInstallResult, renderSetupPlan, renderSetupResult, renderUninstallPlan, renderUninstallResult, stageReporter} from '../../src/core/output.js'
+import {downloadProgress, renderBootstrapPlan, renderBootstrapResult, renderInstallResult, renderProfileList, renderProfileShow, renderSetupPlan, renderSetupResult, renderUninstallPlan, renderUninstallResult, stageReporter} from '../../src/core/output.js'
+import type {BootstrapResult} from '../../src/core/bootstrap/run.js'
 import {ansiStyle, plainStyle} from '../../src/core/style.js'
 
 describe('renderInstallResult', () => {
@@ -376,5 +377,121 @@ describe('stageReporter', () => {
     r.report('downloading', 'apt:zsh')
     r.report('installing', 'apt:zsh')
     expect(r.events).toEqual(['write:downloading apt:zsh', 'newline'])
+  })
+})
+
+const bootstrapResult = (over: Partial<BootstrapResult> = {}): BootstrapResult => ({
+  action: 'bootstrap',
+  counts: {changed: 1, failed: 0, satisfied: 1, skipped: 0, 'would-change': 0},
+  dryRun: false,
+  lineage: ['base', 'dev'],
+  profile: 'dev',
+  sections: [
+    {section: 'packages', status: 'ok', changes: [{id: 'apt:git', status: 'satisfied', detail: '2.43.0'}]},
+    {section: 'tools', status: 'ok', changes: [{id: 'mise:node', status: 'changed', detail: '22.11.0'}]},
+  ],
+  success: true,
+  ...over,
+})
+
+describe('renderBootstrapResult', () => {
+  it('heads with the profile and its lineage, then groups by section', () => {
+    expect(renderBootstrapResult(bootstrapResult())).toEqual([
+      'Profile: dev  (base -> dev)',
+      '',
+      'packages',
+      '✓ apt:git  already satisfied (2.43.0)',
+      '',
+      'tools',
+      '+ mise:node  changed (22.11.0)',
+      '',
+      '1 changed · 1 already satisfied',
+    ])
+  })
+
+  it('omits the lineage when a profile extends nothing', () => {
+    expect(renderBootstrapResult(bootstrapResult({lineage: ['dev']}))[0]).toBe('Profile: dev')
+  })
+
+  it('shows an error beside the change that failed', () => {
+    const lines = renderBootstrapResult(
+      bootstrapResult({sections: [{section: 'packages', status: 'failed', changes: [{id: 'apt:nope', status: 'failed', error: 'no candidate'}]}]}),
+    )
+    expect(lines).toContain('✗ apt:nope  failed: no candidate')
+  })
+
+  it('names a skipped section instead of leaving it blank', () => {
+    const lines = renderBootstrapResult(bootstrapResult({sections: [{section: 'tools', status: 'skipped', changes: []}]}))
+    expect(lines).toContain('tools')
+    expect(lines).toContain('· skipped')
+  })
+
+  it('appends the would-run block on a dry run', () => {
+    const lines = renderBootstrapResult(bootstrapResult({commands: ['apt-get install git'], dryRun: true}))
+    expect(lines.slice(-2)).toEqual(['Would run:', '  apt-get install git'])
+  })
+
+  it('pads before painting, so colour never skews the columns', () => {
+    const wide = bootstrapResult({
+      sections: [
+        {
+          section: 'packages',
+          status: 'ok',
+          changes: [
+            {id: 'apt:git', status: 'satisfied'},
+            {id: 'apt:build-essential', status: 'changed'},
+          ],
+        },
+      ],
+    })
+    const plain = renderBootstrapResult(wide)
+    const painted = renderBootstrapResult(wide, ansiStyle)
+    const at = (line: string) => line.replace(/\u001B\[[\d;]*m/g, '').indexOf('  ')
+    expect(at(painted[3])).toBe(at(plain[3]))
+    expect(at(painted[4])).toBe(at(plain[4]))
+  })
+})
+
+describe('renderBootstrapPlan', () => {
+  it('lists only the pending changes, grouped by section', () => {
+    expect(
+      renderBootstrapPlan([
+        {
+          section: 'packages',
+          commands: [],
+          changes: [
+            {id: 'apt:git', status: 'would-change', command: 'apt-get install git'},
+            {id: 'apt:curl', status: 'satisfied'},
+          ],
+        },
+      ]),
+    ).toEqual(['Plan:', '  packages  apt:git  apt-get install git', ''])
+  })
+})
+
+describe('renderProfileList', () => {
+  it('shows name, summary and parents', () => {
+    expect(
+      renderProfileList([
+        {name: 'base', summary: 'Essentials', extends: [], sections: ['packages']},
+        {name: 'dev', summary: 'Local dev box', extends: ['base'], sections: ['packages', 'tools']},
+      ]),
+    ).toEqual(['base  Essentials', 'dev   Local dev box  (extends base)'])
+  })
+})
+
+describe('renderProfileShow', () => {
+  it('lists each declared section, and nothing for the empty ones', () => {
+    expect(
+      renderProfileShow({
+        name: 'dev',
+        summary: 'Local dev box',
+        lineage: ['base', 'dev'],
+        packages: ['git'],
+        tools: ['node'],
+        setup: [],
+        services: [],
+      }),
+    ).toEqual(['Profile: dev  (base -> dev)', 'Local dev box', '', 'packages  git', 'tools     node'])
   })
 })
