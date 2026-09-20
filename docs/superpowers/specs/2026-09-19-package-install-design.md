@@ -1,6 +1,10 @@
 # `ops package install` — Design
 
-Date: 2026-09-19 · Status: revised (mise bootstrap as provider), pending spec review
+Date: 2026-09-19 · Status: **superseded** by [`2026-09-20-tool-command-surface-design.md`](2026-09-20-tool-command-surface-design.md)
+
+> The command described here now ships as **`ops tool install`**; `ops package install`
+> no longer exists. Everything below about resolution, providers, layering and safety
+> still holds — only the command name changed. Kept as the original record.
 
 ## Goal
 
@@ -107,9 +111,19 @@ A spec `apt:zsh` is installed iff `apt.packages[]` has `package == "zsh"` with `
 
 Revision 2026-09-19: mise tools are the default, because the registry covers many tools and gives newer builds (apt on Ubuntu has no `fastfetch`, for example).
 
-1. On `SYSTEM_PREFERRED` (`core/package/resolve.ts`: zsh, bash, fish, git, curl, wget, unzip, build-essential, ca-certificates, openssh-client, tmux) → OS manager (`apt:`/`dnf:`). Shells and base packages belong at system paths even when the registry has them.
+1. On the system list `package.system` (defaults in `apps/cli/config/defaults.yaml`: zsh, bash, fish, git, curl, wget, unzip, build-essential, ca-certificates, openssh-client, tmux) → OS manager (`apt:`/`dnf:`). Shells and base packages belong at system paths even when the registry has them.
 2. `mise registry <name>` exits 0 → mise tool `mise:<name>`, installed with `mise use -g <name>@latest` (recorded as `name = "latest"` in `[tools]`) by `providers/mise-tools.ts`.
 3. Otherwise → OS manager.
+
+The list is data, not code. `core/config.ts` loads the built-in `apps/cli/config/defaults.yaml` (shipped via `files` in `package.json`), then the user config (`$OPS_CONFIG`, else `$XDG_CONFIG_HOME/ops/config.yaml`, else `~/.config/ops/config.yaml`; missing = defaults only, bad content = `CONFIG_INVALID`). In the user config, a list replaces the defaults; `add`/`remove` adjusts them so new defaults still arrive:
+
+```yaml
+package:
+  system:
+    add: [htop]     # also via apt/dnf
+    remove: [tmux]  # back to registry lookup
+  # or: system: [zsh, git]   # replace the whole list
+```
 
 Explicit prefixes skip resolution: `mise:<tool>` (backend ids too, e.g. `mise:aqua:owner/repo`) is a tool; any other prefix is a `mise bootstrap packages` manager. OS detection runs only when a spec needs it. Tools need no confirmation (`mise use` does not prompt or use sudo); `CONFIRMATION_REQUIRED` and the sudo check apply to system packages only.
 

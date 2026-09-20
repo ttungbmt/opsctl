@@ -16,7 +16,7 @@ describe('renderInstallResult', () => {
         success: false,
       }),
     ).toEqual([
-      'Package manager: apt',
+      'Installed with: apt',
       '✓ apt:zsh      already installed (5.9-6ubuntu2)',
       '+ apt:ripgrep  installed (14.1.0)',
       '✗ apt:foo      failed',
@@ -33,6 +33,6 @@ describe('renderInstallResult', () => {
         packages: [{spec: 'apt:sl', status: 'would-install'}],
         success: true,
       }),
-    ).toEqual(['Package manager: apt', '~ apt:sl  would install', '', 'Would run:', '  sudo apt-get install -y -- sl'])
+    ).toEqual(['Installed with: apt', '~ apt:sl  would install', '', 'Would run:', '  sudo apt-get install -y -- sl'])
   })
 })

@@ -78,7 +78,7 @@ Commands should gradually converge on a consistent set of global flags.
 Example:
 
 ```bash
-ops package install docker \
+ops tool install docker \
   --yes \
   --json \
   --non-interactive
@@ -132,47 +132,9 @@ full
 
 ---
 
-## Package Management
-
-Ops CLI provides a unified package interface.
-
-```bash
-ops package search docker
-
-ops package install docker
-ops package remove docker
-
-ops package update
-ops package upgrade
-
-ops package list
-ops package outdated
-```
-
-Possible providers:
-
-```text
-Windows
-├── winget
-├── Scoop
-└── Chocolatey
-
-macOS
-└── Homebrew
-
-Linux
-├── apt
-├── dnf
-└── pacman
-```
-
-The user should normally not need to care which provider is used.
-
----
-
 ## Tool Management
 
-A **tool** is a higher-level concept than a package.
+A **tool** is a capability you want available on the machine — `git`, `node`, `docker`, `ripgrep`. `ops tool` is the single surface for managing them.
 
 ```bash
 ops tool list
@@ -188,7 +150,46 @@ ops tool status docker
 ops tool doctor mise
 ```
 
-Initial tool candidates:
+### How a tool gets installed
+
+Ops picks the provider; the user should normally not need to care which one is used.
+
+```text
+Windows
+├── winget
+├── Scoop
+└── Chocolatey
+
+macOS
+└── Homebrew
+
+Linux
+├── apt
+├── dnf
+└── pacman
+
+Cross-platform
+└── mise (registry tools)
+```
+
+A plain name becomes a mise tool when the mise registry has it. Shells and base
+system packages (`zsh`, `git`, `curl`, …) and names missing from the registry go
+to the OS package manager. Prefix a name to force a provider:
+
+```bash
+ops tool install apt:git
+ops tool install brew:jq
+ops tool install mise:aqua:BurntSushi/ripgrep
+```
+
+> **Note — package is a layer, not a command group.** Internally a *package* is
+> one entry of an OS package manager and a *tool* is the higher-level concept
+> layered on top of it (see [architecture](architecture.md)). That boundary is
+> real in the code, but it is not exposed as a second command group: there is no
+> `ops package`. Making the user choose the layer would be the same mistake as
+> naming a command after its provider.
+
+### Initial tool candidates
 
 ```text
 git

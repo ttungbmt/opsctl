@@ -9,7 +9,7 @@ const LABELS: Record<PackageStatus, [symbol: string, text: string]> = {
 
 export function renderInstallResult(result: InstallResult): string[] {
   const width = Math.max(...result.packages.map((p) => p.spec.length))
-  const lines = [`Package manager: ${result.managers.join(', ')}`]
+  const lines = [`Installed with: ${result.managers.join(', ')}`]
 
   for (const p of result.packages) {
     const [symbol, text] = LABELS[p.status]

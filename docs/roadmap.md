@@ -53,8 +53,6 @@ Target:
 ```bash
 ops bootstrap developer
 
-ops package install
-
 ops tool install
 
 ops tool setup
@@ -206,8 +204,6 @@ ops version
 ops doctor
 
 ops bootstrap
-
-ops package install <package>
 
 ops tool install <tool>
 

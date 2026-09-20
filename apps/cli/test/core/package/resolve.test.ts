@@ -2,7 +2,7 @@ import {describe, expect, it} from 'vitest'
 import {OpsError} from '../../../src/core/errors.js'
 import {resolveSpecs} from '../../../src/core/package/resolve.js'
 
-function deps(registry: string[] = []) {
+function deps(registry: string[] = [], preferred: ReadonlySet<string> = new Set(['zsh', 'tmux'])) {
   const lookups: string[] = []
   let detections = 0
   return {
@@ -15,6 +15,7 @@ function deps(registry: string[] = []) {
         lookups.push(name)
         return registry.includes(name)
       },
+      systemPreferred: preferred,
     },
     detections: () => detections,
     lookups,
@@ -53,5 +54,11 @@ describe('resolveSpecs', () => {
     const error = await resolveSpecs(['--force'], d.deps).catch((e: unknown) => e)
     expect((error as OpsError).code).toBe('INVALID_PACKAGE_NAME')
     expect(d.lookups).toEqual(['jq'])
+  })
+
+  it('follows the given system list', async () => {
+    const d = deps(['tmux', 'htop'], new Set(['htop']))
+    expect(await resolveSpecs(['tmux', 'htop'], d.deps)).toEqual(['mise:tmux', 'apt:htop'])
+    expect(d.lookups).toEqual(['tmux'])
   })
 })

@@ -5,6 +5,7 @@
   "scripts": {
     "build": "pnpm --filter @ops/cli build",
     "test": "pnpm --filter @ops/cli test",
+    "typecheck": "pnpm --filter @ops/cli typecheck",
     "ops": "node apps/cli/bin/run.js",
     "link:global": "ln -sf \"$PWD/apps/cli/bin/run.js\" \"$HOME/.local/bin/ops\""
   }

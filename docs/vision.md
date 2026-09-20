@@ -131,7 +131,7 @@ brew install ...
 use:
 
 ```bash
-ops package install <package>
+ops tool install <tool>
 ```
 
 Ops CLI detects the platform and selects the appropriate provider.

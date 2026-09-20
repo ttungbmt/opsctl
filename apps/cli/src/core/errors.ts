@@ -5,6 +5,7 @@ export type OpsErrorCode =
   | 'SUDO_PASSWORD_REQUIRED'
   | 'MISE_BOOTSTRAP_UNAVAILABLE'
   | 'MISE_COMMAND_FAILED'
+  | 'CONFIG_INVALID'
 
 export class OpsError extends Error {
   readonly code: OpsErrorCode

@@ -76,6 +76,7 @@ function setup(overrides: Partial<InstallDeps> = {}) {
     isTTY: true,
     mise,
     sudoReady: async () => true,
+    systemPreferred: new Set(['zsh']),
     tools,
     ...overrides,
   }

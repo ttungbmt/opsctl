@@ -35,6 +35,8 @@ export interface InstallDeps {
   isTTY: boolean
   /** True when privileged commands can run without a password prompt. */
   sudoReady: () => Promise<boolean>
+  /** Plain names installed with apt/dnf even when the mise registry has them. */
+  systemPreferred: ReadonlySet<string>
 }
 
 type Installed = Map<PackageSpec, {installed: boolean; version?: string}>
@@ -43,11 +45,12 @@ type PackageResult = InstallResult['packages'][number]
 const PRIVILEGED_MANAGERS = new Set(['apt', 'dnf'])
 
 export async function installPackages(options: InstallOptions, deps: InstallDeps): Promise<InstallResult> {
-  if (options.packages.length === 0) throw new OpsError('INVALID_PACKAGE_NAME', 'No packages given')
+  if (options.packages.length === 0) throw new OpsError('INVALID_PACKAGE_NAME', 'No tools given')
 
   const specs = await resolveSpecs(options.packages, {
     detectManager: deps.detectManager,
     inRegistry: (name) => deps.tools.inRegistry(name),
+    systemPreferred: deps.systemPreferred,
   })
   const tools = specs.filter(isToolSpec)
   const system = specs.filter((spec) => !isToolSpec(spec))

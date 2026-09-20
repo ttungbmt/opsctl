@@ -9,6 +9,7 @@
   },
   "files": [
     "bin",
+    "config",
     "dist"
   ],
   "oclif": {
@@ -21,15 +22,17 @@
     ]
   },
   "scripts": {
-    "build": "tsc",
+    "build": "rm -rf dist && tsc",
     "dev": "tsc --watch",
-    "test": "vitest run"
+    "test": "vitest run",
+    "typecheck": "tsc -p test"
   },
   "dependencies": {
     "@oclif/core": "^5.0.0",
     "execa": "^10.0.1",
     "ink": "^7.1.1",
     "react": "^19.3.0",
+    "yaml": "^2.9.1",
     "zod": "^4.6.5"
   },
   "devDependencies": {

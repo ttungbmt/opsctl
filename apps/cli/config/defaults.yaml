@@ -1,0 +1,17 @@
+# Built-in defaults for ops. Override in ~/.config/ops/config.yaml (or $OPS_CONFIG).
+package:
+  # Plain names installed with apt/dnf even when the mise registry has them:
+  # shells and base system packages that other software expects at system paths.
+  # User config: `system: [...]` replaces this list, `system: {add: [...], remove: [...]}` adjusts it.
+  system:
+    - bash
+    - build-essential
+    - ca-certificates
+    - curl
+    - fish
+    - git
+    - openssh-client
+    - tmux
+    - unzip
+    - wget
+    - zsh

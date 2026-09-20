@@ -68,7 +68,6 @@ ops
 ├── bootstrap
 ├── doctor
 ├── system
-├── package
 ├── tool
 ├── setup
 ├── env
@@ -191,9 +190,31 @@ ops system cleanup --dry-run
 
 ---
 
-# 7. Packages
+# 7. Tools
 
-Unified abstraction:
+A **tool** is a capability you want on the machine. `ops tool` is the single
+public surface; there is no `ops package` command group.
+
+```bash
+ops tool list
+
+ops tool install node
+ops tool install terraform
+
+ops tool setup git
+
+ops tool update node
+
+ops tool status docker
+
+ops tool doctor git
+
+ops tool remove node
+```
+
+## 7.1 How a tool is installed
+
+Ops picks the provider:
 
 ```text
 Windows → winget
@@ -201,27 +222,22 @@ macOS   → brew
 Debian  → apt
 Fedora  → dnf
 Arch    → pacman
+
+any     → mise (registry tools)
 ```
 
-Commands:
+A plain name → mise tool if the registry has it, else the OS package manager.
+Force one with a prefix:
 
 ```bash
-ops package search docker
-
-ops package install docker
-ops package remove docker
-
-ops package update
-ops package upgrade
-
-ops package list
-ops package outdated
+ops tool install apt:git
+ops tool install brew:jq
 ```
 
-Do not expose package manager unless needed:
+Do not expose the provider unless asked:
 
 ```bash
-ops package install docker
+ops tool install docker
 ```
 
 instead of:
@@ -232,24 +248,15 @@ apt install ...
 brew install ...
 ```
 
+## 7.2 package = layer, not command group
+
+`ToolProvider` sits on top of `PackageManager` (§34). That layering is real in
+`src/`, but it stays internal — a user should never have to ask "is this a tool
+or a package?" to pick a command.
+
 ---
 
-# 8. Tools
-
-Tools are higher-level than packages.
-
-```bash
-ops tool list
-
-ops tool install node
-ops tool install terraform
-
-ops tool update node
-
-ops tool status docker
-
-ops tool doctor git
-```
+# 8. Tool Inventory
 
 Initial providers:
 
@@ -905,7 +912,7 @@ Track:
 ```text
 command
 workflow
-package install
+tool install
 upgrade
 config change
 failure
@@ -928,8 +935,7 @@ Backup:
 configs
 dotfiles
 profiles
-tool inventory
-package inventory
+tool inventory (mise tools + system packages)
 ops settings
 ```
 
@@ -1115,7 +1121,6 @@ Use singular resource names:
 tool
 service
 profile
-package
 workflow
 ```
 
@@ -1257,8 +1262,6 @@ ops version
 ops doctor
 
 ops bootstrap
-
-ops package install
 
 ops tool install
 ops tool setup

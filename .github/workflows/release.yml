@@ -19,6 +19,8 @@ jobs:
 
       - run: pnpm build
 
+      - run: pnpm typecheck
+
       - run: pnpm test
 
       # oclif pack can't install deps for a package nested in a pnpm workspace,

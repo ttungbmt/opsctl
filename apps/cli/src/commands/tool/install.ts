@@ -1,5 +1,6 @@
 import {Args, Command, Flags} from '@oclif/core'
 
+import {loadConfig} from '../../core/config.js'
 import {OpsError} from '../../core/errors.js'
 import {renderInstallResult} from '../../core/output.js'
 import {type InstallResult, installPackages} from '../../core/package/install.js'
@@ -8,23 +9,23 @@ import {createMiseBootstrap} from '../../providers/mise-bootstrap.js'
 import {createMiseTools} from '../../providers/mise-tools.js'
 import {detectSystemManager} from '../../providers/os.js'
 
-export default class PackageInstall extends Command {
-  static override summary = 'Install packages'
+export default class ToolInstall extends Command {
+  static override summary = 'Install a tool'
   static override description =
-    'A plain name is installed as a mise tool (`mise use -g`, recorded in [tools]) when the mise registry has it. Shells and base system packages (zsh, git, curl, …) and names missing from the registry go to the OS package manager (apt or dnf) via `mise bootstrap packages`, recorded in [bootstrap.packages]. Use manager:package to pick one (e.g. apt:fastfetch, brew:jq, mise:aqua:owner/repo).'
+    'Makes sure each tool exists on this machine; ops picks how to install it. A plain name becomes a mise tool (`mise use -g`, recorded in [tools]) when the mise registry has it. Shells and base system packages (zsh, git, curl, …) and names missing from the registry go to the OS package manager (apt or dnf) via `mise bootstrap packages`, recorded in [bootstrap.packages]. Use manager:name to pick one yourself (e.g. apt:fastfetch, brew:jq, mise:aqua:owner/repo). The system list is package.system in config/defaults.yaml; replace it (a list) or adjust it (add/remove) in ~/.config/ops/config.yaml (or $OPS_CONFIG).'
   static override examples = [
-    '<%= config.bin %> package install fastfetch',
-    '<%= config.bin %> package install zsh git --yes',
-    '<%= config.bin %> package install jq sl --dry-run',
-    '<%= config.bin %> package install apt:fastfetch mise:aqua:BurntSushi/ripgrep',
-    '<%= config.bin %> package install brew:jq --json --non-interactive',
+    '<%= config.bin %> tool install fastfetch',
+    '<%= config.bin %> tool install zsh git --yes',
+    '<%= config.bin %> tool install jq sl --dry-run',
+    '<%= config.bin %> tool install apt:fastfetch mise:aqua:BurntSushi/ripgrep',
+    '<%= config.bin %> tool install brew:jq --json --non-interactive',
   ]
   static override enableJsonFlag = true
-  // Variadic package names; anything that looks like an unknown flag is rejected by toPackageSpec.
+  // Variadic tool names; anything that looks like an unknown flag is rejected by toPackageSpec.
   static override strict = false
   // Shown in usage/help; the full list is read from argv (strict = false).
   static override args = {
-    packages: Args.string({description: 'Package names (mise tool if in the registry, else apt/dnf) or manager:package (e.g. apt:zsh, mise:jq)'}),
+    tools: Args.string({description: 'Tool names, or manager:name to force a provider (e.g. apt:zsh, mise:jq)'}),
   }
   static override flags = {
     'dry-run': Flags.boolean({default: false, summary: 'Show what would be installed without writing config or installing'}),
@@ -33,7 +34,8 @@ export default class PackageInstall extends Command {
   }
 
   async run(): Promise<InstallResult> {
-    const {argv, flags} = await this.parse(PackageInstall)
+    const {argv, flags} = await this.parse(ToolInstall)
+    const config = await loadConfig()
     const result = await installPackages(
       {
         dryRun: flags['dry-run'],
@@ -47,6 +49,7 @@ export default class PackageInstall extends Command {
         isTTY: Boolean(process.stdin.isTTY),
         mise: createMiseBootstrap(execaRunner),
         sudoReady: () => sudoReady(execaRunner),
+        systemPreferred: new Set(config.package.system),
         tools: createMiseTools(execaRunner),
       },
     )

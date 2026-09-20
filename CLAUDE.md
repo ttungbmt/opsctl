@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-Ops CLI (`ops` command, repo `opsctl`) is in the **early scaffolding phase**: a pnpm workspace with the oclif CLI in `apps/cli` (`bin/run.js`, oclif config in its `package.json`). Implemented: `ops --version` and `ops package install` (delegates to `mise bootstrap packages`; spec in `docs/superpowers/specs/2026-09-19-package-install-design.md`). Run the CLI with `pnpm ops <args>` from the root (or `node apps/cli/bin/run.js <args>`). `pnpm link:global` symlinks `~/.local/bin/ops` to `apps/cli/bin/run.js` so `ops` works from any directory (dev install — source changes apply immediately). The source of truth for intent is:
+Ops CLI (`ops` command, repo `opsctl`) is in the **early scaffolding phase**: a pnpm workspace with the oclif CLI in `apps/cli` (`bin/run.js`, oclif config in its `package.json`). Implemented: `ops --version` and `ops tool install` (routes to mise tools or `mise bootstrap packages`; specs in `docs/superpowers/specs/2026-09-19-package-install-design.md` and `2026-09-20-tool-command-surface-design.md`). Run the CLI with `pnpm ops <args>` from the root (or `node apps/cli/bin/run.js <args>`). `pnpm link:global` symlinks `~/.local/bin/ops` to `apps/cli/bin/run.js` so `ops` works from any directory (dev install — source changes apply immediately). The source of truth for intent is:
 
 - `README.md` — overview, install, links to detailed docs
 - `docs/vision.md` — why, goals, long-term vision
@@ -22,10 +22,11 @@ Toolchain (Node LTS + pnpm 12) is pinned in `mise.toml`; run `mise install` afte
 
 ## Commands
 
-- `pnpm build` — compile `apps/cli/src` → `apps/cli/dist` (tsc); required before running the CLI
+- `pnpm build` — clear `apps/cli/dist` and compile `apps/cli/src` (tsc); required before running the CLI
+- `pnpm typecheck` — type-check `src` + `test` (`apps/cli/test/tsconfig.json`; Vitest and `pnpm build` don't type-check tests)
 - `pnpm test` — all tests (Vitest); single file: `pnpm --filter @ops/cli exec vitest run test/core/package/install.test.ts`
 - `pnpm ops <args>` — run the local build (the `ops` on PATH is the mise-installed release)
-- Code layout: `src/commands` (oclif, thin) → `src/core` → `src/providers` → `src/executor`; only `src/providers/mise-bootstrap.ts` (system packages) and `src/providers/mise-tools.ts` (mise tools) know mise's CLI/JSON. `package install` resolves plain names in `src/core/package/resolve.ts`: system-preferred list → apt/dnf, else mise registry → tool, else apt/dnf. Relative imports need `.js` extensions (NodeNext). TS 7 needs `"types": ["node"]` in tsconfig for Node typings.
+- Code layout: `src/commands` (oclif, thin) → `src/core` → `src/providers` → `src/executor`; only `src/providers/mise-bootstrap.ts` (system packages) and `src/providers/mise-tools.ts` (mise tools) know mise's CLI/JSON. `tool install` (`src/commands/tool/install.ts`) resolves plain names in `src/core/package/resolve.ts`: system-preferred list → apt/dnf, else mise registry → tool, else apt/dnf. Config: built-in defaults in `apps/cli/config/defaults.yaml` (keep default data there, not in code), overlaid by `~/.config/ops/config.yaml` (or `$OPS_CONFIG`); loaded and Zod-validated by `src/core/config.ts`. `package.system` is the system-preferred list (user: a list replaces it, `add`/`remove` adjusts it). Relative imports need `.js` extensions (NodeNext). TS 7 needs `"types": ["node"]` in tsconfig for Node typings.
 
 ## Planned stack
 
@@ -40,7 +41,7 @@ Layers: CLI (oclif) / TUI (Ink) → Application core → Domain → Providers / 
 - **Command != business logic.** oclif commands and Ink screens are thin presentation layers that call the same application core. The TUI must never shell out to CLI commands.
 - **Feature != provider.** Public commands name the capability, not the tool behind it (`ops youtube audio`, not `ops ytdlp audio`). `YouTubeAudio` is the feature; yt-dlp and ffmpeg are swappable providers.
 - **Install != setup.** `tool install` makes sure a tool exists; `tool setup` configures it. Keep them separate.
-- **Tool != package.** A package is installed by a platform package manager (auto-picked per OS). A tool is a higher-level concept with install, setup, update, and doctor.
+- **Tool != package.** A package is installed by a platform package manager (auto-picked per OS). A tool is a higher-level concept with install, setup, update, and doctor. This boundary is **internal layering only** (`ToolProvider` over `PackageManager`): the public surface is `ops tool` alone. There is no `ops package` command group — making the user pick the layer leaks it the same way naming a command after its provider would.
 - **Human output != machine output.** Every important command should support `--json`, `--yes`, and `--non-interactive` so scripts and agents can call it without prompts.
 - Provider contracts (`ToolProvider`, `PackageManager`) are in `docs/cheatsheet.md` §34.
 - Operations should be idempotent (inspect → compare → plan → apply → verify).
@@ -56,4 +57,4 @@ Layers: CLI (oclif) / TUI (Ink) → Application core → Domain → Providers / 
 
 ## Scope
 
-Build the MVP first (cheatsheet §37): core CLI, config, executor, doctor, package/tool abstractions, bootstrap, and the yt-dlp wrapper. MVP commands: `ops version`, `doctor`, `bootstrap`, `package install`, `tool install|setup|doctor`, `youtube video|audio`, `config get|set`. Don't build TUI, plugins, cloud, or AI layers ahead of the roadmap.
+Build the MVP first (cheatsheet §37): core CLI, config, executor, doctor, package/tool abstractions, bootstrap, and the yt-dlp wrapper. MVP commands: `ops version`, `doctor`, `bootstrap`, `tool install|setup|doctor`, `youtube video|audio`, `config get|set`. Don't build TUI, plugins, cloud, or AI layers ahead of the roadmap.

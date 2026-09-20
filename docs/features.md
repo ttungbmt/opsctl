@@ -86,9 +86,9 @@ full
 
 ---
 
-## 3. Software / Package Management
+## 3. Software / Tool Management
 
-Unified interface cho:
+Một mặt tiền duy nhất — `ops tool` — cho mọi provider bên dưới:
 
 ```text
 winget
@@ -106,22 +106,10 @@ cargo
 mise
 ```
 
-Commands:
-
-```bash
-ops package search
-ops package install
-ops package remove
-ops package update
-ops package upgrade
-ops package list
-ops package outdated
-```
-
 Mục tiêu:
 
 ```bash
-ops package install docker
+ops tool install docker
 ```
 
 thay vì user phải biết:
@@ -132,11 +120,22 @@ macOS   → brew
 Ubuntu  → apt
 ```
 
+Ép provider khi cần:
+
+```bash
+ops tool install apt:git
+ops tool install brew:jq
+```
+
+> *Package* (một entry của OS package manager) và *tool* (khái niệm cấp cao
+> nằm trên nó) là hai **tầng trong code**, không phải hai nhóm lệnh. Không có
+> `ops package`.
+
 ---
 
-## 4. Tool Management
+## 4. Tool Lifecycle
 
-Quản lý các công cụ developer/system ở abstraction level cao hơn package manager.
+Vòng đời đầy đủ của một tool — cao hơn hẳn "cài một gói".
 
 ```bash
 ops tool install
@@ -1066,7 +1065,7 @@ Mọi feature quan trọng cần hỗ trợ non-interactive mode.
 Ví dụ:
 
 ```bash
-ops package install docker \
+ops tool install docker \
   --yes \
   --json \
   --non-interactive

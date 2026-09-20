@@ -1,25 +1,9 @@
 import type {SystemManager} from '../../providers/os.js'
 import {type PackageSpec, TOOL_MANAGER, toPackageSpec} from './spec.js'
 
-/**
- * Plain names that go to the OS package manager even when the mise registry has them:
- * shells and base system packages that other software expects at system paths.
- */
-export const SYSTEM_PREFERRED: ReadonlySet<string> = new Set([
-  'bash',
-  'build-essential',
-  'ca-certificates',
-  'curl',
-  'fish',
-  'git',
-  'openssh-client',
-  'tmux',
-  'unzip',
-  'wget',
-  'zsh',
-])
-
 export interface ResolveDeps {
+  /** Plain names sent to apt/dnf even when the registry has them (`package.system` in the config). */
+  systemPreferred: ReadonlySet<string>
   detectManager: () => Promise<SystemManager>
   inRegistry: (name: string) => Promise<boolean>
 }
@@ -38,7 +22,7 @@ export async function resolveSpecs(inputs: string[], deps: ResolveDeps): Promise
   const specs: PackageSpec[] = []
   for (const input of inputs) {
     if (input.includes(':')) specs.push(toPackageSpec(input))
-    else if (SYSTEM_PREFERRED.has(input)) specs.push(await system(input))
+    else if (deps.systemPreferred.has(input)) specs.push(await system(input))
     else {
       // Validate before handing the name to `mise registry`.
       toPackageSpec(input, TOOL_MANAGER)
