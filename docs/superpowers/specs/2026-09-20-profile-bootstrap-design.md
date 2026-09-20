@@ -230,7 +230,7 @@ resolve profile ──┬─ PROFILE_NOT_FOUND / CONFIG_INVALID / PROFILE_SECTIO
   plan(packages) → plan(tools) → plan(setup)    ← read-only; no writes, no declare
         │           (an OpsError here aborts: nothing has changed, so aborting is free)
         ├─ --dry-run ───────────────────────────→ print plan + "Would run:", exit 0
-        ├─ pending == 0 ────────────────────────→ print "already satisfied", exit 0
+        │  (pending == 0 still applies: apply is what declares the set to mise)
         ├─ pending > 0, no --yes, and (--json or no TTY) → CONFIRMATION_REQUIRED, exit 1
         │
   onPlan(every plan)   ← one plan block, printed before anything runs
