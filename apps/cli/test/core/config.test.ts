@@ -1,7 +1,8 @@
 import {readFile} from 'node:fs/promises'
 
+import {z} from 'zod'
 import {describe, expect, it} from 'vitest'
-import {configPath, defaultsPath, loadConfig} from '#core/config.js'
+import {configPath, defaultsPath, loadConfig, readCatalog} from '#core/config.js'
 import {OpsError} from '#core/errors.js'
 import {recipeIndex} from '#core/tool/recipe.js'
 
@@ -322,5 +323,76 @@ describe('mise', () => {
   it('ships an installer and a path in the real defaults', async () => {
     const config = await loadConfig(async (path) => readFile(path, 'utf8'), '/nonexistent/ops.yaml', defaultsPath())
     expect(config.mise).toEqual({installer: 'https://mise.run', path: '/usr/local/bin/mise'})
+  })
+})
+
+describe('readCatalog', () => {
+  const Entry = z.strictObject({package: z.string()})
+
+  /** Serves exactly the files given; anything else is ENOENT, like the real fs. */
+  const reader = (entries: Record<string, string>) => async (path: string) => {
+    if (path in entries) return entries[path]
+    throw Object.assign(new Error('missing'), {code: 'ENOENT'})
+  }
+
+  const lister = (names: string[]) => async () => names
+
+  it('keys entries by filename and sorts them, whatever order the filesystem returns', async () => {
+    const files = {
+      '/tool/firefox.yaml': 'package: apt:firefox\n',
+      '/tool/agent-browser.yaml': 'package: mise:agent-browser\n',
+    }
+    // Reverse order in, sorted order out.
+    const catalog = await readCatalog(reader(files), lister(['firefox.yaml', 'agent-browser.yaml']), '/tool', Entry)
+
+    expect(Object.keys(catalog)).toEqual(['agent-browser', 'firefox'])
+    expect(catalog.firefox).toEqual({package: 'apt:firefox'})
+  })
+
+  it('ignores README.md and dotfiles', async () => {
+    const files = {'/tool/firefox.yaml': 'package: apt:firefox\n'}
+    const names = ['README.md', '.gitkeep', '.firefox.yaml.swp', 'firefox.yaml']
+    const catalog = await readCatalog(reader(files), lister(names), '/tool', Entry)
+
+    expect(Object.keys(catalog)).toEqual(['firefox'])
+  })
+
+  it('rejects a file that is not .yaml, naming it', async () => {
+    // A .yml typo must fail loudly; silently skipping it is the bug this guards.
+    const error = await errorOf(readCatalog(reader({}), lister(['firefox.yml']), '/tool', Entry))
+
+    expect(error.code).toBe('CONFIG_INVALID')
+    expect(error.message).toContain('/tool/firefox.yml')
+  })
+
+  it('rejects a filename that is not a usable entry name', async () => {
+    const error = await errorOf(readCatalog(reader({}), lister(['Firefox.yaml']), '/tool', Entry))
+
+    expect(error.code).toBe('CONFIG_INVALID')
+    expect(error.message).toContain('/tool/Firefox.yaml')
+  })
+
+  it('treats a missing directory as no entries', async () => {
+    const missing = async () => {
+      throw Object.assign(new Error('missing'), {code: 'ENOENT'})
+    }
+
+    expect(await readCatalog(reader({}), missing, '/repo', Entry)).toEqual({})
+  })
+
+  it('propagates a directory error that is not ENOENT', async () => {
+    const denied = async () => {
+      throw Object.assign(new Error('denied'), {code: 'EACCES'})
+    }
+
+    await expect(readCatalog(reader({}), denied, '/repo', Entry)).rejects.toThrow('denied')
+  })
+
+  it('names the offending file when an entry fails its schema', async () => {
+    const files = {'/tool/firefox.yaml': 'packag: apt:firefox\n'}
+    const error = await errorOf(readCatalog(reader(files), lister(['firefox.yaml']), '/tool', Entry))
+
+    expect(error.code).toBe('CONFIG_INVALID')
+    expect(error.message).toContain('/tool/firefox.yaml')
   })
 })

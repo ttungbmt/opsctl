@@ -9,6 +9,7 @@ import {z} from 'zod'
 import {OpsError} from './errors.js'
 
 type ReadFile = (path: string) => Promise<string>
+type ReadDir = (dir: string) => Promise<string[]>
 
 const NameList = z.array(z.string())
 
@@ -50,8 +51,12 @@ const UninstallSchema = z.strictObject({
   purge: z.strictObject({paths: z.array(PurgePath).min(1)}),
 })
 
-/** A repo name becomes a filename under /etc/apt, so restrict it to what apt will read. */
-const RepoName = z.string().regex(/^[a-z0-9][a-z0-9._-]*$/, 'must match [a-z0-9][a-z0-9._-]*')
+/**
+ * A catalog entry's name. It is a filename (under config/, and for a repo under /etc/apt
+ * too), it is typed on the command line, and it is printed -- so restrict it to what all
+ * three accept.
+ */
+const EntryName = z.string().regex(/^[a-z0-9][a-z0-9._-]*$/, 'must match [a-z0-9][a-z0-9._-]*')
 
 const HttpsUrl = z.url({protocol: /^https$/})
 
@@ -178,7 +183,7 @@ const DefaultsSchema = z.looseObject({
     system: NameList,
   }),
   /** Third-party apt repositories, referenced by name from a recipe's `repo`. */
-  repo: z.record(RepoName, RepoSchema).default({}),
+  repo: z.record(EntryName, RepoSchema).default({}),
   /** Named recipes: a plain name resolves to recipe.package before any heuristic. */
   tool: z.record(z.string(), RecipeSchema).default({}),
   /** Named machine profiles; `ops bootstrap <name>` converges the machine to one. */
@@ -199,7 +204,7 @@ const UserSchema = z.looseObject({
     })
     .optional(),
   /** Repos are merged by name; a user repo replaces the built-in of the same name. */
-  repo: z.record(RepoName, RepoSchema).optional(),
+  repo: z.record(EntryName, RepoSchema).optional(),
   /** Recipes are merged by name; a user recipe replaces the built-in of the same name. */
   tool: z.record(z.string(), RecipeSchema).optional(),
   /** Profiles are merged by name; a user profile replaces the built-in of the same name. */
@@ -260,4 +265,47 @@ async function readYaml<T>(readFile: ReadFile, path: string, schema: z.ZodType<T
     const detail = error instanceof z.ZodError ? z.prettifyError(error) : (error as Error).message
     throw new OpsError('CONFIG_INVALID', `Invalid config ${path}: ${detail}`)
   }
+}
+
+/**
+ * One catalog directory -> one record keyed by filename. Files are sorted so the result
+ * never depends on the order the filesystem returns, and each key is validated because it is
+ * typed on the command line and printed. Classification is by name alone: nothing is stat'd,
+ * so a catalog is flat by construction. A missing directory means no entries -- git cannot
+ * store an empty one, so "none configured" presents as "no directory".
+ */
+export async function readCatalog<T>(
+  readFile: ReadFile,
+  readDir: ReadDir,
+  dir: string,
+  schema: z.ZodType<T>,
+): Promise<Record<string, T>> {
+  let names: string[]
+  try {
+    names = await readDir(dir)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return {}
+    throw error
+  }
+
+  const entries: Record<string, T> = {}
+  for (const name of [...names].sort()) {
+    // Editor swapfiles and .gitkeep are not entries; README.md documents the directory.
+    if (name.startsWith('.') || name === 'README.md') continue
+
+    const path = join(dir, name)
+    if (!name.endsWith('.yaml')) {
+      throw new OpsError('CONFIG_INVALID', `Invalid config ${path}: a catalog entry must be named <name>.yaml`)
+    }
+
+    const key = name.slice(0, -'.yaml'.length)
+    const named = EntryName.safeParse(key)
+    if (!named.success) {
+      throw new OpsError('CONFIG_INVALID', `Invalid config ${path}: ${z.prettifyError(named.error)}`)
+    }
+
+    entries[key] = await readYaml(readFile, path, schema)
+  }
+
+  return entries
 }
