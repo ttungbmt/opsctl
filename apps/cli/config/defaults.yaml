@@ -113,4 +113,5 @@ profile:
     # No `setup:` here on purpose: the only recipe with setup steps is agent-browser,
     # and a default profile must not download a browser.
     packages: [zsh]
-    tools: [node, pnpm]
+    # Pinned to the LTS line; pnpm tracks latest. A bare name records @latest.
+    tools: [node@lts, pnpm]

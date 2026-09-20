@@ -288,5 +288,6 @@ describe('profiles', () => {
     const config = await loadConfig(async (path) => readFile(path, 'utf8'), '/nonexistent/ops.yaml', defaultsPath())
     expect(Object.keys(config.profile)).toEqual(['base', 'minimal', 'dev'])
     expect(config.profile.dev.extends).toBe('minimal')
+    expect(config.profile.dev.tools).toEqual(['node@lts', 'pnpm'])
   })
 })
