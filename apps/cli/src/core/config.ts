@@ -88,6 +88,71 @@ const RecipeSchema = z.looseObject({
   uninstall: UninstallSchema.optional(),
 })
 
+/** Every section a profile may declare, in the order `ops bootstrap` runs them. */
+export const SECTION_ORDER = ['packages', 'tools', 'setup', 'services', 'shell', 'dotfiles'] as const
+export type SectionName = (typeof SECTION_ORDER)[number]
+
+/** A profile name is a config key and appears in output; same shape as a repo name. */
+const ProfileName = z.string().regex(/^[a-z0-9][a-z0-9._-]*$/, 'must match [a-z0-9][a-z0-9._-]*')
+
+/** A list section. A bare list ADDS to what `extends` brought in; add/remove adjusts it. */
+const NameSection = z.union([NameList, z.strictObject({add: NameList.optional(), remove: NameList.optional()})])
+
+/**
+ * profile.<name>.services[]. Phase 2 implements it; the shape is fixed now so nobody's
+ * profile needs rewriting when it lands.
+ */
+const ServiceSchema = z.strictObject({
+  /** systemd unit name; ".service" is implied when absent. */
+  name: z.string().regex(/^[A-Za-z0-9@._-]+$/, 'must be a systemd unit name'),
+  scope: z.enum(['system', 'user']).default('system'),
+  enabled: z.boolean().default(true),
+  state: z.enum(['started', 'stopped', 'ignore']).default('started'),
+})
+
+const ServiceSection = z.union([
+  z.array(ServiceSchema),
+  z.strictObject({add: z.array(ServiceSchema).optional(), remove: NameList.optional()}),
+])
+
+/** profile.<name>.shell. Phase 2. */
+const ShellSchema = z.strictObject({
+  /** A tool or package name ops can resolve to a shell binary, or an absolute path. */
+  name: z.string().min(1),
+  /** "current" means whoever runs ops; anything else is a login name. */
+  user: z.string().min(1).default('current'),
+})
+
+/** profile.<name>.dotfiles. Phase 3. */
+const DotfilesSchema = z.strictObject({
+  repo: z.string().min(1),
+  branch: z.string().min(1).optional(),
+  apply: z.boolean().default(true),
+  sourceDir: z.string().min(1).optional(),
+})
+
+/**
+ * profile.<name>: a machine `ops bootstrap` converges to. Strict, unlike a recipe: a
+ * misspelled `serivces:` would be kept, silently converge the wrong machine, and still
+ * report success -- the same reason SetupStepSchema and RepoSchema are strict.
+ */
+const ProfileSchema = z.strictObject({
+  summary: z.string().optional(),
+  /** Profiles this one composes over, left to right; this profile always wins last. */
+  extends: z.union([ProfileName, z.array(ProfileName)]).optional(),
+  packages: NameSection.optional(),
+  tools: NameSection.optional(),
+  setup: NameSection.optional(),
+  services: ServiceSection.optional(),
+  shell: ShellSchema.optional(),
+  dotfiles: DotfilesSchema.optional(),
+})
+
+export type Profile = z.infer<typeof ProfileSchema>
+export type ServiceSpec = z.infer<typeof ServiceSchema>
+export type ShellSpec = z.infer<typeof ShellSchema>
+export type DotfilesSpec = z.infer<typeof DotfilesSchema>
+
 // Unknown keys are kept so other areas can add their own sections.
 const DefaultsSchema = z.looseObject({
   package: z.looseObject({
@@ -98,6 +163,8 @@ const DefaultsSchema = z.looseObject({
   repo: z.record(RepoName, RepoSchema).default({}),
   /** Named recipes: a plain name resolves to recipe.package before any heuristic. */
   tool: z.record(z.string(), RecipeSchema).default({}),
+  /** Named machine profiles; `ops bootstrap <name>` converges the machine to one. */
+  profile: z.record(ProfileName, ProfileSchema).default({}),
 })
 
 const UserSchema = z.looseObject({
@@ -111,6 +178,8 @@ const UserSchema = z.looseObject({
   repo: z.record(RepoName, RepoSchema).optional(),
   /** Recipes are merged by name; a user recipe replaces the built-in of the same name. */
   tool: z.record(z.string(), RecipeSchema).optional(),
+  /** Profiles are merged by name; a user profile replaces the built-in of the same name. */
+  profile: z.record(ProfileName, ProfileSchema).optional(),
 })
 
 export type Config = z.infer<typeof DefaultsSchema>
@@ -135,6 +204,7 @@ export function mergeConfig(defaults: Config, user: UserConfig): Config {
     ...defaults,
     ...user,
     package: {...defaults.package, ...user.package, system: [...new Set(names)]},
+    profile: {...defaults.profile, ...user.profile},
     repo: {...defaults.repo, ...user.repo},
     tool: {...defaults.tool, ...user.tool},
   }

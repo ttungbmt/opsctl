@@ -34,8 +34,8 @@ describe('configPath', () => {
 
 describe('loadConfig', () => {
   it('uses the defaults when the user file is missing or empty', async () => {
-    expect(await load()).toEqual({package: {system: ['zsh', 'tmux']}, repo: {}, tool: {}})
-    expect(await load('')).toEqual({package: {system: ['zsh', 'tmux']}, repo: {}, tool: {}})
+    expect(await load()).toEqual({package: {system: ['zsh', 'tmux']}, profile: {}, repo: {}, tool: {}})
+    expect(await load('')).toEqual({package: {system: ['zsh', 'tmux']}, profile: {}, repo: {}, tool: {}})
   })
 
   it('adjusts the default list with add/remove', async () => {
@@ -48,7 +48,7 @@ describe('loadConfig', () => {
   })
 
   it('keeps unknown keys', async () => {
-    expect(await load('youtube:\n  quality: 1080p\n')).toEqual({package: {system: ['zsh', 'tmux']}, repo: {}, tool: {}, youtube: {quality: '1080p'}})
+    expect(await load('youtube:\n  quality: 1080p\n')).toEqual({package: {system: ['zsh', 'tmux']}, profile: {}, repo: {}, tool: {}, youtube: {quality: '1080p'}})
   })
 
   it('rejects invalid YAML and wrong types with CONFIG_INVALID', async () => {
@@ -245,5 +245,48 @@ describe('repo config', () => {
 
     const text = await errorOf(load(undefined, DEFAULTS + MOZILLA.replace('priority: 1000', 'priority: high')))
     expect(text.code).toBe('CONFIG_INVALID')
+  })
+})
+
+describe('profiles', () => {
+  it('merges profiles by name, replacing a built-in wholesale', async () => {
+    const defaults = DEFAULTS + 'profile:\n  base:\n    packages: [git]\n  dev:\n    extends: base\n    packages: [zsh]\n'
+    const config = await load('profile:\n  dev:\n    packages: [fish]\n', defaults)
+    expect(config.profile.base).toEqual({packages: ['git']})
+    // The user entry replaced the built-in: `extends` is gone, not merged away.
+    expect(config.profile.dev).toEqual({packages: ['fish']})
+  })
+
+  it('accepts extends as a string or a list', async () => {
+    const config = await load(undefined, DEFAULTS + 'profile:\n  a:\n    extends: base\n  b:\n    extends: [base, a]\n')
+    expect(config.profile.a.extends).toBe('base')
+    expect(config.profile.b.extends).toEqual(['base', 'a'])
+  })
+
+  it('accepts the add/remove form of a list section', async () => {
+    const config = await load(undefined, DEFAULTS + 'profile:\n  a:\n    packages: {add: [git], remove: [zsh]}\n')
+    expect(config.profile.a.packages).toEqual({add: ['git'], remove: ['zsh']})
+  })
+
+  it('applies service defaults', async () => {
+    const config = await load(undefined, DEFAULTS + 'profile:\n  a:\n    services: [{name: docker}]\n')
+    expect(config.profile.a.services).toEqual([{name: 'docker', scope: 'system', enabled: true, state: 'started'}])
+  })
+
+  it('rejects an unknown key in a profile', async () => {
+    // Strict, unlike a recipe: a misspelled section would converge the wrong machine
+    // and still report success.
+    const error = await errorOf(load(undefined, DEFAULTS + 'profile:\n  a:\n    serivces: [docker]\n'))
+    expect(error.code).toBe('CONFIG_INVALID')
+  })
+
+  it('defaults to an empty map when the file declares no profiles', async () => {
+    expect((await load()).profile).toEqual({})
+  })
+
+  it('parses the shipped defaults, including the profiles', async () => {
+    const config = await loadConfig(async (path) => readFile(path, 'utf8'), '/nonexistent/ops.yaml', defaultsPath())
+    expect(Object.keys(config.profile)).toEqual(['base', 'minimal', 'dev'])
+    expect(config.profile.dev.extends).toBe('minimal')
   })
 })
