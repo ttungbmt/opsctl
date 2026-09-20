@@ -1,3 +1,4 @@
+import {CommandNotFoundError} from '../../src/core/errors.js'
 import type {RunOptions, RunResult, Runner} from '../../src/executor/exec.js'
 
 interface Response {
@@ -13,6 +14,13 @@ interface Response {
 export class FakeRunner implements Runner {
   calls: {cmd: string; args: string[]; opts?: RunOptions}[] = []
   private responses: Response[] = []
+  private absent = new Set<string>()
+
+  /** Makes `cmd` behave as if it is not on PATH, the way execa reports ENOENT. */
+  missing(cmd: string): this {
+    this.absent.add(cmd)
+    return this
+  }
 
   on(prefix: string, ...results: Partial<RunResult>[]): this {
     this.responses.push({prefix, results: results.length > 0 ? results : [{}]})
@@ -20,6 +28,7 @@ export class FakeRunner implements Runner {
   }
 
   async run(cmd: string, args: string[], opts?: RunOptions): Promise<RunResult> {
+    if (this.absent.has(cmd)) throw new CommandNotFoundError(cmd)
     this.calls.push({cmd, args, opts})
     const line = [cmd, ...args].join(' ')
     const response = [...this.responses].reverse().find((r) => line.startsWith(r.prefix))
