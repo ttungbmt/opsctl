@@ -263,7 +263,7 @@ package name and, when needed, a `prepare` step that makes it installable on a
 machine that has never seen it.
 
 ```yaml
-# ~/.config/ops/config.yaml — or the built-in config/defaults.yaml
+# ~/.config/ops/config.yaml — to add or override a recipe
 tool:
   google-chrome:
     summary: Google Chrome
@@ -271,6 +271,12 @@ tool:
     prepare:
       deb: https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
 ```
+
+The built-in recipes ship one per file under `config/tool/<name>.yaml` — the
+filename is the tool's name and the file holds just the entry body (so
+`config/tool/google-chrome.yaml` holds the `summary`/`package`/`prepare` lines
+above, with no `tool:` wrapper). `defaults.yaml` itself no longer accepts a
+`tool:` section at all.
 
 A recipe name resolves to its package ahead of every heuristic, so
 `ops tool install google-chrome` works on a fresh machine. `prepare` runs only when the
@@ -284,6 +290,7 @@ repository instead, the recipe names a **repo** and ops configures apt before
 installing:
 
 ```yaml
+# ~/.config/ops/config.yaml — to add or override a repo/recipe
 repo:
   mozilla:
     uri: https://packages.mozilla.org/apt
@@ -297,6 +304,9 @@ tool:
     package: apt:firefox
     repo: mozilla
 ```
+
+Built in, the same two entries live as separate files: `config/repo/mozilla.yaml`
+and `config/tool/firefox.yaml`, each holding just its own body.
 
 ops writes `/etc/apt/{keyrings,sources.list.d,preferences.d}/ops-<name>.*`, runs
 `apt-get update`, then proves with `apt-cache policy` that apt's candidate really

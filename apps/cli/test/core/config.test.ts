@@ -108,7 +108,7 @@ describe('loadConfig', () => {
     expect(repo.message).toContain('config/repo/')
   })
 
-  it('ships config/defaults.yaml with the system list and the google-chrome recipe', async () => {
+  it('ships the system list in defaults.yaml and the google-chrome recipe in config/tool/', async () => {
     const config = await loadConfig((path) => readFile(path, 'utf8'), '/nonexistent/ops.yaml', defaultsPath())
     expect(config.package.system).toContain('zsh')
     expect(config.package.system).toContain('git')

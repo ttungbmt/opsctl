@@ -10,7 +10,7 @@ import {execaRunner} from '#executor/exec.js'
 export default class ToolSetup extends Command {
   static override summary = 'Configure an installed tool'
   static override description =
-    'Installing a tool makes it exist; setting it up makes it behave. Each tool named in the config as `tool.<name>.setup` carries an ordered list of steps, and every step has a `check` (exit 0 means it is already done) and a `run` that makes the check pass. ops runs the checks first, shows what is missing, applies only those steps, then re-runs each check to verify it. Steps come from `config/defaults.yaml` and can be replaced or added in ~/.config/ops/config.yaml (or $OPS_CONFIG).'
+    'Installing a tool makes it exist; setting it up makes it behave. Each tool named in the config as `tool.<name>.setup` carries an ordered list of steps, and every step has a `check` (exit 0 means it is already done) and a `run` that makes the check pass. ops runs the checks first, shows what is missing, applies only those steps, then re-runs each check to verify it. Steps come from `config/tool/<name>.yaml` and can be replaced or added in ~/.config/ops/config.yaml (or $OPS_CONFIG).'
   static override examples = [
     '<%= config.bin %> tool setup agent-browser',
     '<%= config.bin %> tool setup agent-browser --dry-run',
