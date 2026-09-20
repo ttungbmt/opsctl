@@ -749,8 +749,9 @@ profile:
     summary: Local development box
     extends: minimal
     packages: [zsh]                # resolved the way `ops tool install` does
-    tools: [node, pnpm]            # ignores package.system, so a bare name
-                                   # prefers the mise registry; may carry @version
+    tools: [node@lts, pnpm]        # ignores package.system, so a bare name prefers
+                                   # the mise registry; @version pins it, and a bare
+                                   # name records @latest
     setup: [git]                   # tool names that have tool.<name>.setup
 ```
 

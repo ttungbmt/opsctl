@@ -65,7 +65,7 @@ profile:
     summary: Local development box
     extends: minimal
     packages: [zsh]
-    tools: [node, pnpm]
+    tools: [node@lts, pnpm]
     setup: [git]
 ```
 
