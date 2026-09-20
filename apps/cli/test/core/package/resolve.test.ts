@@ -86,6 +86,21 @@ describe('resolveSpecs', () => {
     expect(await resolveSpecs(['apt:chromium'], d.deps)).toEqual(['apt:chromium'])
   })
 
+  // "node@lts" is a version request, not a tool id: `mise registry node@lts` exits 1,
+  // so asking with the raw input silently routed the tool to apt.
+  it('asks the registry for the name, not the version request', async () => {
+    const d = deps(['node'])
+    expect(await resolveSpecs(['node@lts'], d.deps)).toEqual(['mise:node@lts'])
+    expect(d.lookups).toEqual(['node'])
+    expect(d.detections()).toBe(0)
+  })
+
+  it('still falls back to the OS manager when the versioned name is not a tool', async () => {
+    const d = deps([])
+    expect(await resolveSpecs(['sl@1.2'], d.deps)).toEqual(['apt:sl@1.2'])
+    expect(d.lookups).toEqual(['sl'])
+  })
+
   it('follows the given system list', async () => {
     const d = deps(['tmux', 'htop'], new Set(['htop']))
     expect(await resolveSpecs(['tmux', 'htop'], d.deps)).toEqual(['mise:tmux', 'apt:htop'])

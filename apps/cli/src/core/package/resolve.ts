@@ -1,6 +1,6 @@
 import type {SystemManager} from '../../providers/os.js'
 import type {Recipe} from '../tool/recipe.js'
-import {type PackageSpec, TOOL_MANAGER, toPackageSpec} from './spec.js'
+import {type PackageSpec, TOOL_MANAGER, toPackageSpec, withoutVersion} from './spec.js'
 
 export interface ResolveDeps {
   /** Plain names sent to apt/dnf even when the registry has them (`package.system` in the config). */
@@ -33,9 +33,10 @@ export async function resolveSpecs(inputs: string[], deps: ResolveDeps): Promise
     else if (recipe) specs.push(toPackageSpec(recipe.package))
     else if (deps.systemPreferred.has(input)) specs.push(await system(input))
     else {
-      // Validate before handing the name to `mise registry`.
+      // Validate before handing the name to `mise registry`, and ask for the tool name
+      // alone: the registry has no entry for "node@lts", which is a version request.
       toPackageSpec(input, TOOL_MANAGER)
-      specs.push(await deps.inRegistry(input) ? `${TOOL_MANAGER}:${input}` : await system(input))
+      specs.push(await deps.inRegistry(withoutVersion(input)) ? `${TOOL_MANAGER}:${input}` : await system(input))
     }
   }
 

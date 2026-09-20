@@ -1,4 +1,5 @@
 import type {Runner} from '../../../executor/exec.js'
+import {withoutVersion} from '../../package/spec.js'
 import type {RecipeIndex} from '../../tool/recipe.js'
 import {type SetupOptions, type SetupResult, type SetupStatus, setupTools} from '../../tool/setup.js'
 import type {Change, ChangeStatus, Section, SectionContext} from '../section.js'
@@ -25,7 +26,7 @@ const toChange = (s: SetupResult['steps'][number]): Change => ({
 })
 
 /** "mise:node@22" and "node@22" both name the tool "node". */
-const bareName = (entry: string): string => entry.replace(/^[^:]+:/, '').replace(/@.*$/, '')
+const bareName = (entry: string): string => withoutVersion(entry.replace(/^[^:]+:/, ''))
 
 function optionsFor(ctx: SectionContext, dryRun: boolean): SetupOptions {
   return {

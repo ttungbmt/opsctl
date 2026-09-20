@@ -45,9 +45,16 @@ export function packageName(spec: PackageSpec): string {
   return spec.slice(spec.indexOf(':') + 1)
 }
 
-/** The key mise uses for the tool in [tools] and `mise ls`: the name without an "@version" suffix. */
-export function toolKey(spec: PackageSpec): string {
-  const name = toolName(spec)
+/**
+ * "node@lts" -> "node". The search starts at index 1 so a leading "@" survives: an npm
+ * scope like "@scope/pkg" is part of the name, not a version request.
+ */
+export function withoutVersion(name: string): string {
   const at = name.indexOf('@', 1)
   return at === -1 ? name : name.slice(0, at)
+}
+
+/** The key mise uses for the tool in [tools] and `mise ls`: the name without an "@version" suffix. */
+export function toolKey(spec: PackageSpec): string {
+  return withoutVersion(toolName(spec))
 }
