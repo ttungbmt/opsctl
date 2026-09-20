@@ -43,10 +43,20 @@ function withVersion(name: string): string {
   return /@/.test(name.slice(1)) ? name : `${name}@latest`
 }
 
+/**
+ * Every mise command runs from here. `mise ls -g` omits a tool that a mise.toml in the
+ * working directory overrides, so ops reported a globally installed tool as missing
+ * whenever the user stood in a project pinning it -- and `mise use -g` warned about an
+ * override that has nothing to do with the global toolchain ops manages. Where the user
+ * happens to stand must not change what ops sees or does. "/" rather than a temp dir or
+ * $HOME because it is root-owned: no mise.toml can be planted above it or in it.
+ */
+const NEUTRAL_CWD = ['-C', '/']
+
 export function createMiseTools(runner: Runner): MiseTools {
   async function mise(args: string[], opts?: RunOptions): Promise<RunResult> {
     try {
-      return await runner.run('mise', args, opts)
+      return await runner.run('mise', [...NEUTRAL_CWD, ...args], opts)
     } catch (error) {
       if (error instanceof CommandNotFoundError) {
         throw new OpsError('MISE_BOOTSTRAP_UNAVAILABLE', 'mise not found on PATH; install it from https://mise.jdx.dev')

@@ -19,15 +19,32 @@ async function codeOf(promise: Promise<unknown>): Promise<string | undefined> {
 
 describe('createMiseTools', () => {
   it('inRegistry follows the exit code of mise registry', async () => {
-    const runner = new FakeRunner().on('mise registry fastfetch', {exitCode: 0}).on('mise registry zsh', {exitCode: 1})
+    const runner = new FakeRunner().on('mise -C / registry fastfetch', {exitCode: 0}).on('mise -C / registry zsh', {exitCode: 1})
     const tools = createMiseTools(runner)
     expect(await tools.inRegistry('fastfetch')).toBe(true)
     expect(await tools.inRegistry('zsh')).toBe(false)
-    expect(runner.calls[0].args).toEqual(['registry', 'fastfetch'])
+    expect(runner.calls[0].args).toEqual(['-C', '/', 'registry', 'fastfetch'])
+  })
+
+  it('runs every command from a neutral directory', async () => {
+    // `mise ls -g` omits a tool that a mise.toml in the cwd overrides, so ops reported a
+    // globally installed tool as missing whenever you stood in a project that pins it.
+    // ops manages the global toolchain; where the user happens to stand must not change
+    // what it sees or does. "/" is root-owned, so no planted mise.toml can be read there.
+    const runner = new FakeRunner().on('mise', {exitCode: 0, stdout: '{}'})
+    const tools = createMiseTools(runner)
+    await tools.inRegistry('jq')
+    await tools.status()
+    await tools.install(['jq'], {capture: false, nonInteractive: false})
+    await tools.dryRun(['jq'])
+    await tools.remove(['jq'], {capture: false, nonInteractive: false})
+
+    expect(runner.calls).toHaveLength(5)
+    for (const call of runner.calls) expect(call.args.slice(0, 2)).toEqual(['-C', '/'])
   })
 
   it('status parses mise ls -g --json', async () => {
-    const runner = new FakeRunner().on('mise ls -g --json', {stdout: LS})
+    const runner = new FakeRunner().on('mise -C / ls -g --json', {stdout: LS})
     expect(await createMiseTools(runner).status()).toEqual([
       {installed: true, name: 'bat', version: '0.26.1'},
       {installed: true, name: 'github:ouch-org/ouch', version: '0.6.1'},
@@ -47,8 +64,8 @@ describe('createMiseTools', () => {
     const tools = createMiseTools(runner)
     await tools.install(['fastfetch', 'node@22', 'aqua:a/b'], {capture: false, nonInteractive: false})
     await tools.install(['jq'], {capture: true, nonInteractive: true})
-    expect(runner.calls[0]).toMatchObject({args: ['use', '-g', 'fastfetch@latest', 'node@22', 'aqua:a/b@latest'], opts: {stdin: 'inherit', stdout: 'inherit'}})
-    expect(runner.calls[1]).toMatchObject({args: ['use', '-g', 'jq@latest'], opts: {stdin: 'ignore', stdout: 'capture'}})
+    expect(runner.calls[0]).toMatchObject({args: ['-C', '/', 'use', '-g', 'fastfetch@latest', 'node@22', 'aqua:a/b@latest'], opts: {stdin: 'inherit', stdout: 'inherit'}})
+    expect(runner.calls[1]).toMatchObject({args: ['-C', '/', 'use', '-g', 'jq@latest'], opts: {stdin: 'ignore', stdout: 'capture'}})
   })
 
   it('install returns a non-zero exit code instead of throwing', async () => {
@@ -65,7 +82,7 @@ describe('createMiseTools', () => {
       'mise fastfetch@2.68.1          ⇢ would install',
       'mise would update ~/.config/mise/config.toml (add: fastfetch@2.68.1)',
     ])
-    expect(runner.calls[0].args).toEqual(['use', '-g', '--dry-run', 'fastfetch@latest'])
+    expect(runner.calls[0].args).toEqual(['-C', '/', 'use', '-g', '--dry-run', 'fastfetch@latest'])
   })
 
   it('maps failures to OpsErrors', async () => {
@@ -83,7 +100,7 @@ describe('createMiseTools', () => {
     const tools = createMiseTools(runner)
     await tools.remove(['fastfetch', 'node', 'aqua:a/b'], {capture: false, nonInteractive: false})
     expect(runner.calls[0]).toMatchObject({
-      args: ['unuse', '-g', 'fastfetch', 'node', 'aqua:a/b'],
+      args: ['-C', '/', 'unuse', '-g', 'fastfetch', 'node', 'aqua:a/b'],
       opts: {stdin: 'inherit', stdout: 'inherit'},
     })
   })
