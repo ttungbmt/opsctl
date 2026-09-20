@@ -137,6 +137,22 @@ describe('bootstrapProfile dry run', () => {
     expect(result.commands).toEqual(['apt install git', 'mise use node'])
   })
 
+  it('reports failure when a plan could not be computed for a change', async () => {
+    // "1 failed" printed next to exit 0 would be a lie. Drift is `would-change`;
+    // `failed` means the probe itself could not answer, which is an error either way.
+    const log: string[] = []
+    const failed: Change[] = [{id: 'x', status: 'failed', error: 'nope'}]
+    const result = await bootstrapProfile(
+      opts({dryRun: true, skip: ['services']}),
+      deps({packages: stub('packages', log, {changes: failed}), tools: stub('tools', log)}),
+    )
+    expect(result.success).toBe(false)
+    expect(result.sections.map((s) => [s.section, s.status])).toEqual([
+      ['packages', 'failed'],
+      ['tools', 'ok'],
+    ])
+  })
+
   it('does not fail fast: a failing section still lets the rest plan', async () => {
     const log: string[] = []
     const failed: Change[] = [{id: 'x', status: 'failed', error: 'nope'}]

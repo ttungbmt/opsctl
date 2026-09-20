@@ -85,13 +85,21 @@ export async function bootstrapProfile(options: BootstrapOptions, deps: Bootstra
   for (const section of active) plans.push(await section.plan(ctx))
 
   if (options.dryRun) {
+    // A dry run does not fail on drift -- that is what `would-change` is for. It does
+    // fail when a plan could not be computed: printing "1 failed" beside exit 0 lies.
     const sections: SectionReport[] = plans.map((plan) => ({
       changes: plan.changes,
       commands: plan.commands,
       section: plan.section,
-      status: 'ok',
+      status: plan.changes.some((change) => change.status === 'failed') ? 'failed' : 'ok',
     }))
-    return {...base, commands: plans.flatMap((plan) => plan.commands), counts: tally(sections), sections, success: true}
+    return {
+      ...base,
+      commands: plans.flatMap((plan) => plan.commands),
+      counts: tally(sections),
+      sections,
+      success: sections.every((section) => section.status !== 'failed'),
+    }
   }
 
   const pending = plans.reduce((total, plan) => total + pendingIn(plan), 0)
